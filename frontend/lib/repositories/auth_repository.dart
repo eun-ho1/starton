@@ -30,6 +30,12 @@ class AuthRepository {
     );
   }
 
+  Future<AuthSessionResponse> refreshSession({
+    required String refreshToken,
+  }) {
+    return _refresh(refreshToken: refreshToken);
+  }
+
   Future<AuthSessionResponse> _authenticate({
     required String path,
     required AuthEmailPasswordRequest request,
@@ -37,6 +43,18 @@ class AuthRepository {
     final response = await _apiClient.postResponse<AuthSessionResponse>(
       path,
       body: request.toJson(),
+      parseData: AuthSessionResponse.fromJson,
+    );
+
+    return _requireSession(response);
+  }
+
+  Future<AuthSessionResponse> _refresh({
+    required String refreshToken,
+  }) async {
+    final response = await _apiClient.postResponse<AuthSessionResponse>(
+      '/auth/refresh',
+      body: {'refreshToken': refreshToken.trim()},
       parseData: AuthSessionResponse.fromJson,
     );
 

@@ -36,6 +36,22 @@ class SupabaseTaskRepository:
     def __init__(self, client: Any) -> None:
         self._client = client
 
+    def get(self, *, user_id: str, task_id: str) -> TaskResponse:
+        response = (
+            self._client.table("tasks")
+            .select(_TASK_COLUMNS)
+            .eq("user_id", user_id)
+            .eq("id", task_id)
+            .limit(1)
+            .execute()
+        )
+        task_row = _single_row(response, "Task was not found for the given user_id.")
+        return _map_task_response(
+            task_row,
+            subtask_rows=self._list_subtasks(user_id=user_id, task_id=task_row["id"]),
+            reminder_rows=self._list_reminders(user_id=user_id, task_id=task_row["id"]),
+        )
+
     def get_by_candidate_id(self, *, user_id: str, candidate_id: str) -> TaskResponse | None:
         response = (
             self._client.table("tasks")
@@ -107,6 +123,62 @@ class SupabaseTaskRepository:
             .execute()
         )
         return [_map_reminder_response(row) for row in _sort_reminder_rows(response.data or [])]
+
+    def mark_completed(
+        self,
+        *,
+        user_id: str,
+        task_id: str,
+        completed_at: datetime,
+    ) -> TaskResponse:
+        payload = {
+            "status": TaskStatus.DONE.value,
+            "completed_at": completed_at.isoformat(),
+        }
+        response = (
+            self._client.table("tasks")
+            .update(payload)
+            .eq("user_id", user_id)
+            .eq("id", task_id)
+            .execute()
+        )
+        _ensure_mutation_succeeded(
+            response,
+            "Task completion update did not affect any rows.",
+        )
+        self._mark_subtasks_completed(
+            user_id=user_id,
+            task_id=task_id,
+            completed_at=completed_at,
+        )
+        return self.get(user_id=user_id, task_id=task_id)
+
+    def _mark_subtasks_completed(
+        self,
+        *,
+        user_id: str,
+        task_id: str,
+        completed_at: datetime,
+    ) -> None:
+        payload = {
+            "status": SubtaskStatus.DONE.value,
+            "completed_at": completed_at.isoformat(),
+        }
+        (
+            self._client.table("subtasks")
+            .update(payload)
+            .eq("user_id", user_id)
+            .eq("task_id", task_id)
+            .in_(
+                "status",
+                [
+                    SubtaskStatus.TODO.value,
+                    SubtaskStatus.DOING.value,
+                    SubtaskStatus.SKIPPED.value,
+                ],
+            )
+            .execute()
+        )
 
     def _list_subtasks(self, *, user_id: str, task_id: str) -> list[dict[str, Any]]:
         response = (
@@ -231,3 +303,10 @@ def _single_row(response: Any, message: str) -> dict[str, Any]:
 
 def _sort_reminder_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return sorted(rows, key=lambda row: row.get("remind_at") or "")
+
+
+def _ensure_mutation_succeeded(response: Any, message: str) -> None:
+    if getattr(response, "data", None) is None:
+        return
+    if isinstance(response.data, list) and response.data == []:
+        raise ValueError(message)

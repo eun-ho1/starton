@@ -1,5 +1,6 @@
 from datetime import datetime
 from typing import Any
+from uuid import UUID
 
 from app.repositories.base import CompletedQuestRepository, QuestRecord
 from app.schemas.quest import CompletedQuestRecordSchema
@@ -18,20 +19,66 @@ class SupabaseCompletedQuestRepository(CompletedQuestRepository):
         elapsed_seconds: int,
         proof_image_path: str | None = None,
     ) -> tuple[str, CompletedQuestRecordSchema]:
+        return self._create_completed_record(
+            user_id=user_id,
+            record=quest,
+            earned_exp=earned_exp,
+            completed_at=completed_at,
+            elapsed_seconds=elapsed_seconds,
+            proof_image_path=proof_image_path,
+            quest_id=_optional_uuid_string(quest.id),
+            task_id=None,
+        )
+
+    def create_completed_task(
+        self,
+        user_id: str,
+        task: QuestRecord,
+        earned_exp: int,
+        completed_at: datetime,
+        elapsed_seconds: int,
+        proof_image_path: str | None = None,
+    ) -> tuple[str, CompletedQuestRecordSchema]:
+        return self._create_completed_record(
+            user_id=user_id,
+            record=task,
+            earned_exp=earned_exp,
+            completed_at=completed_at,
+            elapsed_seconds=elapsed_seconds,
+            proof_image_path=proof_image_path,
+            quest_id=None,
+            task_id=task.id,
+        )
+
+    def _create_completed_record(
+        self,
+        *,
+        user_id: str,
+        record: QuestRecord,
+        earned_exp: int,
+        completed_at: datetime,
+        elapsed_seconds: int,
+        proof_image_path: str | None,
+        quest_id: str | None,
+        task_id: str | None,
+    ) -> tuple[str, CompletedQuestRecordSchema]:
         payload = {
             "user_id": user_id,
-            "profile_id": quest.profile_id,
-            "quest_id": quest.id,
-            "client_quest_id": quest.id,
-            "title": quest.title,
-            "difficulty": quest.difficulty,
-            "category": quest.category,
+            "profile_id": record.profile_id,
+            "quest_id": quest_id,
+            "client_quest_id": record.id,
+            "title": record.title,
+            "difficulty": record.difficulty,
+            "category": record.category,
             "earned_exp": earned_exp,
             "completed_at": completed_at.isoformat(),
             "elapsed_seconds": elapsed_seconds,
             "proof_image_path": proof_image_path,
             "completion_source": "timer" if elapsed_seconds > 0 else "manual",
         }
+        if task_id is not None:
+            payload["task_id"] = task_id
+
         completed_response = (
             self._client.table("completed_quests").insert(payload).execute()
         )
@@ -68,7 +115,7 @@ def _single_row(response: Any) -> dict[str, Any]:
 
 def _map_completed_row(row: dict[str, Any]) -> CompletedQuestRecordSchema:
     return CompletedQuestRecordSchema(
-        questId=row["quest_id"] or "",
+        questId=row.get("client_quest_id") or row.get("quest_id") or "",
         title=row["title"],
         difficulty=row["difficulty"],
         category=row["category"],
@@ -77,3 +124,12 @@ def _map_completed_row(row: dict[str, Any]) -> CompletedQuestRecordSchema:
         elapsedSeconds=row["elapsed_seconds"],
         proofImagePath=row.get("proof_image_path"),
     )
+
+
+def _optional_uuid_string(value: str | None) -> str | None:
+    if value is None:
+        return None
+    try:
+        return str(UUID(str(value)))
+    except (TypeError, ValueError):
+        return None

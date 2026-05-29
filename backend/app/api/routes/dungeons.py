@@ -43,12 +43,28 @@ async def clear_dungeon(
 ) -> DungeonClearApiResponse:
     try:
         result = dungeon_service.clear_dungeon(user_id, dungeon_id)
+    except PermissionError as error:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=ErrorDetail(
+                code="dungeon_claim_not_available",
+                message=str(error),
+            ).model_dump(),
+        ) from error
     except ValueError as error:
         if "Profile" in str(error):
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=ErrorDetail(
                     code="profile_not_found",
+                    message=str(error),
+                ).model_dump(),
+            ) from error
+        if "Quest" in str(error):
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=ErrorDetail(
+                    code="quest_not_found",
                     message=str(error),
                 ).model_dump(),
             ) from error

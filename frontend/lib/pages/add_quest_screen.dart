@@ -2,6 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter_neumorphic_plus/flutter_neumorphic.dart' as neu;
 import 'package:start_on/models/app_local_data.dart';
 
+enum AddQuestScreenResult { deleteQuest }
+
+class AddQuestScreenAiSuggestionRequest {
+  const AddQuestScreenAiSuggestionRequest(this.draft);
+
+  final QuestItem draft;
+}
+
 class AddQuestScreen extends StatefulWidget {
   const AddQuestScreen({
     super.key,
@@ -9,12 +17,16 @@ class AddQuestScreen extends StatefulWidget {
     this.initialQuest,
     this.title = 'Create New Task',
     this.submitLabel = 'Create task',
+    this.showDeleteAction = false,
+    this.returnAiSuggestionRequest = false,
   });
 
   final String? initialCategory;
   final QuestItem? initialQuest;
   final String title;
   final String submitLabel;
+  final bool showDeleteAction;
+  final bool returnAiSuggestionRequest;
 
   @override
   State<AddQuestScreen> createState() => _AddQuestScreenState();
@@ -35,6 +47,8 @@ class _AddQuestScreenState extends State<AddQuestScreen> {
   final TextEditingController _controller = TextEditingController();
   final TextEditingController _manualSubtasksController =
       TextEditingController();
+  final FocusNode _titleFocusNode = FocusNode();
+  final FocusNode _manualSubtasksFocusNode = FocusNode();
 
   String _difficulty = '보통';
   String _category = 'work';
@@ -68,34 +82,62 @@ class _AddQuestScreenState extends State<AddQuestScreen> {
   void dispose() {
     _controller.dispose();
     _manualSubtasksController.dispose();
+    _titleFocusNode.dispose();
+    _manualSubtasksFocusNode.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     final viewInsets = MediaQuery.of(context).viewInsets;
+    final canDeleteQuest = _canDeleteQuest;
 
     return Scaffold(
       backgroundColor: _dialogColor,
       body: SafeArea(
         child: ListView(
+          keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
           padding: EdgeInsets.fromLTRB(28, 24, 28, 40 + viewInsets.bottom),
           children: [
             Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                IconButton(
-                  onPressed: () => Navigator.of(context).pop(),
-                  icon: const Icon(
-                    Icons.arrow_back_rounded,
-                    color: Color(0xFF2C2F36),
-                  ),
-                  padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints(
-                    minWidth: 28,
-                    minHeight: 28,
-                  ),
-                  visualDensity: VisualDensity.compact,
+                Row(
+                  children: [
+                    SizedBox(
+                      width: 40,
+                      height: 40,
+                      child: IconButton(
+                        onPressed: () => Navigator.of(context).pop(),
+                        icon: const Icon(
+                          Icons.arrow_back_rounded,
+                          color: Color(0xFF2C2F36),
+                        ),
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(),
+                        visualDensity: VisualDensity.compact,
+                      ),
+                    ),
+                    const Spacer(),
+                    if (canDeleteQuest)
+                      SizedBox(
+                        width: 40,
+                        height: 40,
+                        child: IconButton(
+                          key: const Key('add_quest.delete_button'),
+                          tooltip: '퀘스트 삭제',
+                          onPressed: _confirmDeleteQuest,
+                          icon: const Icon(
+                            Icons.delete_outline_rounded,
+                            size: 22,
+                            color: Color(0xFFE55353),
+                          ),
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(),
+                          visualDensity: VisualDensity.compact,
+                        ),
+                      ),
+                  ],
                 ),
                 const SizedBox(height: 18),
                 Text(
@@ -103,7 +145,7 @@ class _AddQuestScreenState extends State<AddQuestScreen> {
                   style: const TextStyle(
                     fontSize: 24,
                     fontWeight: FontWeight.w800,
-                    color: _titleColor,
+                    color: _AddQuestScreenState._titleColor,
                   ),
                 ),
                 const SizedBox(height: 14),
@@ -111,20 +153,37 @@ class _AddQuestScreenState extends State<AddQuestScreen> {
                 const SizedBox(height: 8),
                 FractionallySizedBox(
                   widthFactor: 0.86,
-                  child: _InsetFieldShell(
-                    child: TextField(
-                      controller: _controller,
-                      decoration: const InputDecoration(
-                        hintText: '',
-                        border: InputBorder.none,
-                        enabledBorder: InputBorder.none,
-                        focusedBorder: InputBorder.none,
-                        isCollapsed: true,
+                  child: TextField(
+                    controller: _controller,
+                    focusNode: _titleFocusNode,
+                    textInputAction: TextInputAction.next,
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                      color: _AddQuestScreenState._titleColor,
+                    ),
+                    decoration: InputDecoration(
+                      hintText: '퀘스트 제목을 입력하세요',
+                      filled: true,
+                      fillColor: const Color(0xFFF8FAFD),
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 14,
                       ),
-                      style: const TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
-                        color: _titleColor,
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(16),
+                        borderSide: BorderSide.none,
+                      ),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(16),
+                        borderSide: const BorderSide(color: Color(0xFFE2E7F0)),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(16),
+                        borderSide: const BorderSide(
+                          color: Color(0xFF6F63FF),
+                          width: 1.4,
+                        ),
                       ),
                     ),
                   ),
@@ -151,7 +210,7 @@ class _AddQuestScreenState extends State<AddQuestScreen> {
                                     fontWeight: FontWeight.w600,
                                     color: _dueDate == null
                                         ? const Color(0xFFB7BCC7)
-                                        : _titleColor,
+                                        : _AddQuestScreenState._titleColor,
                                   ),
                                 ),
                               ),
@@ -222,29 +281,42 @@ class _AddQuestScreenState extends State<AddQuestScreen> {
                 ),
                 const SizedBox(height: 10),
                 if (_usesManualSubtasks)
-                  _InsetFieldShell(
-                    height: 118,
-                    padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
-                    child: TextField(
-                      controller: _manualSubtasksController,
-                      minLines: 5,
-                      maxLines: 5,
-                      decoration: const InputDecoration(
-                        hintText: '과제 파일 열기 / 10분\n요구사항 정리 / 15분',
-                        border: InputBorder.none,
-                        enabledBorder: InputBorder.none,
-                        focusedBorder: InputBorder.none,
-                        isCollapsed: true,
+                  TextField(
+                    controller: _manualSubtasksController,
+                    focusNode: _manualSubtasksFocusNode,
+                    keyboardType: TextInputType.multiline,
+                    textInputAction: TextInputAction.newline,
+                    minLines: 5,
+                    maxLines: 5,
+                    style: const TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w500,
+                      color: _AddQuestScreenState._titleColor,
+                    ),
+                    decoration: InputDecoration(
+                      hintText: '자료 조사 / 10분\n핵심 정리 / 15분',
+                      filled: true,
+                      fillColor: const Color(0xFFF8FAFD),
+                      contentPadding: const EdgeInsets.all(16),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(16),
+                        borderSide: BorderSide.none,
                       ),
-                      style: const TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w500,
-                        color: _titleColor,
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(16),
+                        borderSide: const BorderSide(color: Color(0xFFE2E7F0)),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(16),
+                        borderSide: const BorderSide(
+                          color: Color(0xFF6F63FF),
+                          width: 1.4,
+                        ),
                       ),
                     ),
                   )
                 else
-                  _AiSuggestionButton(onTap: _submit),
+                  _AiSuggestionButton(onTap: _handleAiSuggestionTap),
                 if (_subtaskError != null) ...[
                   const SizedBox(height: 6),
                   Text(
@@ -337,10 +409,157 @@ class _AddQuestScreenState extends State<AddQuestScreen> {
     );
   }
 
+  bool get _canDeleteQuest =>
+      widget.showDeleteAction && widget.initialQuest != null;
+
+  Future<void> _confirmDeleteQuest() async {
+    if (!_canDeleteQuest) {
+      return;
+    }
+
+    FocusScope.of(context).unfocus();
+    final shouldDelete = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: const Text('퀘스트 삭제'),
+          content: const Text('이 퀘스트를 삭제할까요?'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(false),
+              child: const Text('취소'),
+            ),
+            TextButton(
+              style: TextButton.styleFrom(
+                foregroundColor: const Color(0xFFE55353),
+              ),
+              onPressed: () => Navigator.of(dialogContext).pop(true),
+              child: const Text('삭제'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (!mounted || shouldDelete != true) {
+      return;
+    }
+
+    Navigator.of(context).pop(AddQuestScreenResult.deleteQuest);
+  }
+
+  Future<void> _handleAiSuggestionTap() async {
+    final shouldContinue = await _showAiPromptSelectionDialog();
+    if (!mounted || !shouldContinue) {
+      return;
+    }
+
+    if (!widget.returnAiSuggestionRequest) {
+      _submit();
+      return;
+    }
+
+    final draft = _questFromInput();
+    if (draft == null) {
+      return;
+    }
+
+    Navigator.of(context).pop(AddQuestScreenAiSuggestionRequest(draft));
+  }
+
+  Future<bool> _showAiPromptSelectionDialog() async {
+    const promptOptions = [
+      _AiPromptOption(
+        title: '작게 쪼개기',
+        description: '퀘스트를 바로 실행 가능한 작은 단계로 나눠요.',
+        icon: Icons.account_tree_rounded,
+      ),
+      _AiPromptOption(
+        title: '집중 루틴',
+        description: '시간 배분과 순서를 정리한 집중형 플랜을 만들어요.',
+        icon: Icons.timer_outlined,
+      ),
+      _AiPromptOption(
+        title: '빠른 실행',
+        description: '핵심 작업만 추려 짧고 단순한 제안을 만들어요.',
+        icon: Icons.flash_on_rounded,
+      ),
+    ];
+
+    var selectedIndex = 0;
+    final selected = await showDialog<int>(
+      context: context,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              backgroundColor: _dialogColor,
+              surfaceTintColor: Colors.transparent,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(24),
+              ),
+              titlePadding: const EdgeInsets.fromLTRB(22, 22, 22, 0),
+              contentPadding: const EdgeInsets.fromLTRB(18, 16, 18, 6),
+              actionsPadding: const EdgeInsets.fromLTRB(18, 0, 18, 16),
+              title: const Text(
+                'AI 프롬프트 선택',
+                style: TextStyle(
+                  fontSize: 19,
+                  fontWeight: FontWeight.w900,
+                  color: _AddQuestScreenState._titleColor,
+                ),
+              ),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  for (
+                    var index = 0;
+                    index < promptOptions.length;
+                    index++
+                  ) ...[
+                    _AiPromptOptionTile(
+                      option: promptOptions[index],
+                      selected: selectedIndex == index,
+                      onTap: () => setDialogState(() => selectedIndex = index),
+                    ),
+                    if (index != promptOptions.length - 1)
+                      const SizedBox(height: 10),
+                  ],
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(dialogContext).pop(),
+                  child: const Text('취소'),
+                ),
+                TextButton(
+                  onPressed: () =>
+                      Navigator.of(dialogContext).pop(selectedIndex),
+                  child: const Text('다음'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+
+    return selected != null;
+  }
+
   void _submit() {
+    final quest = _questFromInput();
+    if (quest == null) {
+      return;
+    }
+
+    Navigator.of(context).pop(quest);
+  }
+
+  QuestItem? _questFromInput() {
     final name = _controller.text.trim();
     if (name.isEmpty) {
-      return;
+      return null;
     }
 
     final initialQuest = widget.initialQuest;
@@ -350,38 +569,37 @@ class _AddQuestScreenState extends State<AddQuestScreen> {
         : const <QuestSubtask>[];
     if (_usesManualSubtasks && subtasks.isEmpty) {
       setState(() => _subtaskError = 'subtask를 한 줄 이상 입력해 주세요.');
-      return;
+      return null;
     }
     final activeSubtaskId = _activeSubtaskIdFor(subtasks);
 
-    Navigator.of(context).pop(
-      (initialQuest ??
-              QuestItem(
-                id: DateTime.now().microsecondsSinceEpoch.toString(),
-                title: '',
-                exp: exp,
-                difficulty: _difficulty,
-                category: _category,
-                elapsedSeconds: 0,
-                defaultDurationSeconds:
-                    defaultQuestDurationSecondsForDifficulty(_difficulty),
-                dueDate: _dueDate,
-              ))
-          .copyWith(
-            title: name,
-            exp: exp,
-            difficulty: _difficulty,
-            category: _category,
-            elapsedSeconds: initialQuest?.elapsedSeconds ?? 0,
-            defaultDurationSeconds: defaultQuestDurationSecondsForDifficulty(
-              _difficulty,
-            ),
-            dueDate: _dueDate,
-            subtasks: subtasks,
-            activeSubtaskId: activeSubtaskId,
-            aiSubtaskPrompt: null,
+    return (initialQuest ??
+            QuestItem(
+              id: DateTime.now().microsecondsSinceEpoch.toString(),
+              title: '',
+              exp: exp,
+              difficulty: _difficulty,
+              category: _category,
+              elapsedSeconds: 0,
+              defaultDurationSeconds: defaultQuestDurationSecondsForDifficulty(
+                _difficulty,
+              ),
+              dueDate: _dueDate,
+            ))
+        .copyWith(
+          title: name,
+          exp: exp,
+          difficulty: _difficulty,
+          category: _category,
+          elapsedSeconds: initialQuest?.elapsedSeconds ?? 0,
+          defaultDurationSeconds: defaultQuestDurationSecondsForDifficulty(
+            _difficulty,
           ),
-    );
+          dueDate: _dueDate,
+          subtasks: subtasks,
+          activeSubtaskId: activeSubtaskId,
+          aiSubtaskPrompt: null,
+        );
   }
 
   List<QuestSubtask> _parseManualSubtasks({QuestItem? initialQuest}) {
@@ -528,28 +746,34 @@ class _InsetFieldShell extends StatelessWidget {
     required this.child,
     this.height = 48,
     this.padding = const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+    this.onTap,
   });
 
   final Widget child;
   final double height;
   final EdgeInsets padding;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
-    return neu.Neumorphic(
-      style: neu.NeumorphicStyle(
-        depth: -4,
-        intensity: 0.8,
-        surfaceIntensity: 0.12,
-        color: _AddQuestScreenState._dialogColor,
-        shadowDarkColor: Color(0x18000000),
-        shadowLightColor: Color(0xFFFFFFFF),
-        boxShape: neu.NeumorphicBoxShape.roundRect(
-          BorderRadius.all(Radius.circular(16)),
+    return GestureDetector(
+      onTap: onTap,
+      behavior: HitTestBehavior.translucent,
+      child: neu.Neumorphic(
+        style: neu.NeumorphicStyle(
+          depth: -4,
+          intensity: 0.8,
+          surfaceIntensity: 0.12,
+          color: _AddQuestScreenState._dialogColor,
+          shadowDarkColor: Color(0x18000000),
+          shadowLightColor: Color(0xFFFFFFFF),
+          boxShape: neu.NeumorphicBoxShape.roundRect(
+            BorderRadius.all(Radius.circular(16)),
+          ),
         ),
+        padding: padding,
+        child: SizedBox(height: height - padding.vertical, child: child),
       ),
-      padding: padding,
-      child: SizedBox(height: height - padding.vertical, child: child),
     );
   }
 }
@@ -614,6 +838,95 @@ class _SubtaskModeChip extends StatelessWidget {
               ),
             ],
           ),
+        ),
+      ),
+    );
+  }
+}
+
+class _AiPromptOption {
+  const _AiPromptOption({
+    required this.title,
+    required this.description,
+    required this.icon,
+  });
+
+  final String title;
+  final String description;
+  final IconData icon;
+}
+
+class _AiPromptOptionTile extends StatelessWidget {
+  const _AiPromptOptionTile({
+    required this.option,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final _AiPromptOption option;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 160),
+        curve: Curves.easeOutCubic,
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: selected ? const Color(0xFFE7E3FF) : const Color(0xFFF8FAFD),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: selected ? const Color(0xFF6F63FF) : const Color(0xFFE2E7F0),
+            width: selected ? 1.4 : 1,
+          ),
+        ),
+        child: Row(
+          children: [
+            Icon(
+              option.icon,
+              size: 22,
+              color: selected
+                  ? const Color(0xFF6358FF)
+                  : _AddQuestScreenState._labelColor,
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    option.title,
+                    style: const TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w900,
+                      color: _AddQuestScreenState._titleColor,
+                    ),
+                  ),
+                  const SizedBox(height: 3),
+                  Text(
+                    option.description,
+                    style: const TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: _AddQuestScreenState._labelColor,
+                      height: 1.25,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 10),
+            Icon(
+              selected ? Icons.radio_button_checked : Icons.radio_button_off,
+              size: 19,
+              color: selected
+                  ? const Color(0xFF6358FF)
+                  : _AddQuestScreenState._labelColor,
+            ),
+          ],
         ),
       ),
     );

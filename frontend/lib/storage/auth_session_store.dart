@@ -107,6 +107,15 @@ class AuthSessionStore {
     return session.accessToken.trim();
   }
 
+  Future<String?> loadRefreshToken() async {
+    final session = await load();
+    final refreshToken = session?.refreshToken?.trim();
+    if (refreshToken == null || refreshToken.isEmpty) {
+      return null;
+    }
+    return refreshToken;
+  }
+
   Future<void> clear() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_isSignedInKey);

@@ -34,6 +34,16 @@ void main() {
     expect(apiClient.path, '/auth/sign-up');
   });
 
+  test('refreshSession posts refresh token to refresh endpoint', () async {
+    final apiClient = _FakeAuthApiClient(_successResponse());
+    final repository = AuthRepository(apiClient: apiClient);
+
+    await repository.refreshSession(refreshToken: 'refresh-token');
+
+    expect(apiClient.path, '/auth/refresh');
+    expect(apiClient.body, {'refreshToken': 'refresh-token'});
+  });
+
   test(
     'throws repository exception when success response has no session',
     () async {

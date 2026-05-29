@@ -9,6 +9,12 @@ import 'package:start_on/pages/quest_timer/quest_timer_sections.dart';
 import 'package:start_on/services/quest_timer_background_service.dart';
 import 'package:start_on/storage/quest_image_store.dart';
 
+typedef QuestAiSuggestionRequestHandler =
+    Future<QuestItem?> Function({
+      required QuestItem originalQuest,
+      required QuestItem draft,
+    });
+
 class QuestTimerScreen extends StatefulWidget {
   const QuestTimerScreen({
     super.key,
@@ -16,12 +22,14 @@ class QuestTimerScreen extends StatefulWidget {
     required this.userLevel,
     required this.notificationsEnabled,
     this.onQuestChanged,
+    this.onAiSuggestionRequested,
   });
 
   final QuestItem quest;
   final int userLevel;
   final bool notificationsEnabled;
   final ValueChanged<QuestItem>? onQuestChanged;
+  final QuestAiSuggestionRequestHandler? onAiSuggestionRequested;
 
   @override
   State<QuestTimerScreen> createState() => _QuestTimerScreenState();
@@ -37,9 +45,13 @@ class QuestTimerScreenResult {
   final bool didPauseTimer;
 }
 
-class _QuestTimerScreenState extends State<QuestTimerScreen> {
-  static const int _minimumRewardSeconds = 10 * 60;
+class QuestTimerDeleteResult {
+  const QuestTimerDeleteResult(this.quest);
 
+  final QuestItem quest;
+}
+
+class _QuestTimerScreenState extends State<QuestTimerScreen> {
   // 타이머 제어, 이미지 선택, 인증 이미지 저장을 담당하는 객체들.
   final CountDownController _countDownController = CountDownController();
   final ImagePicker _imagePicker = ImagePicker();
@@ -139,7 +151,8 @@ class _QuestTimerScreenState extends State<QuestTimerScreen> {
                       isCompleting: _isCompleting,
                       running: _running,
                       canReset: _elapsedSeconds > 0,
-                      canComplete: _elapsedSeconds > 60,
+                      // 임시수정: 테스트 중에는 1분 제한 없이 바로 완료 가능하게 둔다.
+                      canComplete: _elapsedSeconds >= 0,
                       onResetTimer: _resetTimer,
                       onToggleTimer: _toggleTimer,
                       onStopTimer: _completeQuest,
@@ -214,6 +227,10 @@ class _QuestTimerScreenState extends State<QuestTimerScreen> {
       if (_elapsedSeconds < _durationSeconds) {
         _countDownController.pause();
       }
+      _stopLocalTicker();
+      if (mounted) {
+        setState(() => _running = false);
+      }
       if (widget.notificationsEnabled) {
         await _questTimerService.pauseTimer(
           questId: _quest.id,
@@ -221,32 +238,23 @@ class _QuestTimerScreenState extends State<QuestTimerScreen> {
           elapsedSeconds: _elapsedSeconds,
           defaultDurationSeconds: _durationSeconds,
         );
-      } else {
-        _stopLocalTicker();
       }
-      if (!mounted) {
-        return;
-      }
-      setState(() => _running = false);
       return;
     }
 
     if (_elapsedSeconds >= _durationSeconds) {
-      if (widget.notificationsEnabled) {
-        await _questTimerService.startOrResumeTimer(
-          questId: _quest.id,
-          questTitle: _quest.title,
-          elapsedSeconds: _elapsedSeconds,
-          defaultDurationSeconds: _durationSeconds,
+      final resetSubtasks = _resetSubtasks(_quest.subtasks);
+      setState(() {
+        _elapsedSeconds = 0;
+        _quest = _quest.copyWith(
+          elapsedSeconds: 0,
+          subtasks: resetSubtasks,
+          activeSubtaskId: _firstIncompleteSubtaskId(resetSubtasks),
         );
-      } else {
-        _startLocalTicker();
-      }
-      if (!mounted) {
-        return;
-      }
-      setState(() => _running = true);
-      return;
+        _hasStarted = false;
+        _timerViewRevision += 1;
+      });
+      widget.onQuestChanged?.call(_quest);
     }
 
     if (_hasStarted) {
@@ -256,6 +264,9 @@ class _QuestTimerScreenState extends State<QuestTimerScreen> {
       _hasStarted = true;
     }
 
+    setState(() => _running = true);
+    _startLocalTicker();
+
     if (widget.notificationsEnabled) {
       await _questTimerService.startOrResumeTimer(
         questId: _quest.id,
@@ -263,13 +274,7 @@ class _QuestTimerScreenState extends State<QuestTimerScreen> {
         elapsedSeconds: _elapsedSeconds,
         defaultDurationSeconds: _durationSeconds,
       );
-    } else {
-      _startLocalTicker();
     }
-    if (!mounted) {
-      return;
-    }
-    setState(() => _running = true);
   }
 
   Future<void> _resetTimerAsync() async {
@@ -303,20 +308,53 @@ class _QuestTimerScreenState extends State<QuestTimerScreen> {
   }
 
   Future<void> _editQuest() async {
-    final updatedQuest = await Navigator.of(context).push<QuestItem>(
-      MaterialPageRoute<QuestItem>(
+    final result = await Navigator.of(context).push<Object?>(
+      MaterialPageRoute<Object?>(
         builder: (context) => AddQuestScreen(
           initialQuest: _quest.copyWith(elapsedSeconds: _elapsedSeconds),
           title: '퀘스트 수정',
           submitLabel: '적용',
+          showDeleteAction: true,
+          returnAiSuggestionRequest: true,
         ),
       ),
     );
 
-    if (!mounted || updatedQuest == null) {
+    if (!mounted || result == null) {
       return;
     }
 
+    if (result == AddQuestScreenResult.deleteQuest) {
+      Navigator.of(context).pop(QuestTimerDeleteResult(_quest));
+      return;
+    }
+
+    if (result case AddQuestScreenAiSuggestionRequest request) {
+      final suggestionHandler = widget.onAiSuggestionRequested;
+      if (suggestionHandler == null) {
+        return;
+      }
+
+      final suggestedQuest = await suggestionHandler(
+        originalQuest: _quest.copyWith(elapsedSeconds: _elapsedSeconds),
+        draft: request.draft.copyWith(elapsedSeconds: _elapsedSeconds),
+      );
+      if (!mounted || suggestedQuest == null) {
+        return;
+      }
+
+      await _applyEditedQuest(suggestedQuest);
+      return;
+    }
+
+    if (result is! QuestItem) {
+      return;
+    }
+
+    await _applyEditedQuest(result);
+  }
+
+  Future<void> _applyEditedQuest(QuestItem updatedQuest) async {
     final questWithProgress = _normalizeQuestProgress(
       updatedQuest.copyWith(elapsedSeconds: _elapsedSeconds),
     );
@@ -343,6 +381,8 @@ class _QuestTimerScreenState extends State<QuestTimerScreen> {
         _countDownController.start();
       });
     }
+
+    widget.onQuestChanged?.call(_quest);
   }
 
   Future<void> _pickProofImage(ImageSource source) async {
@@ -412,10 +452,7 @@ class _QuestTimerScreenState extends State<QuestTimerScreen> {
   }
 
   int _calculateEarnedExp() {
-    if (_elapsedSeconds < _minimumRewardSeconds) {
-      return 0;
-    }
-    return _elapsedSeconds ~/ 60;
+    return _quest.exp;
   }
 
   void _popWithProgress() {
@@ -429,6 +466,7 @@ class _QuestTimerScreenState extends State<QuestTimerScreen> {
       if (_elapsedSeconds < _durationSeconds) {
         _countDownController.pause();
       }
+      _stopLocalTicker();
       if (widget.notificationsEnabled) {
         await _questTimerService.pauseTimer(
           questId: _quest.id,
@@ -436,8 +474,6 @@ class _QuestTimerScreenState extends State<QuestTimerScreen> {
           elapsedSeconds: _elapsedSeconds,
           defaultDurationSeconds: _durationSeconds,
         );
-      } else {
-        _stopLocalTicker();
       }
       if (!mounted) {
         return;
@@ -753,6 +789,21 @@ class _QuestTimerScreenState extends State<QuestTimerScreen> {
         tick.elapsedSeconds,
         _durationSeconds,
       );
+      if (_localTicker != null && tick.isRunning) {
+        return;
+      }
+
+      if (nextElapsedSeconds < _elapsedSeconds) {
+        if (!tick.isRunning) {
+          _stopLocalTicker();
+        }
+        setState(() {
+          _running = tick.isRunning;
+          _hasStarted = _elapsedSeconds > 0 || tick.isRunning;
+        });
+        return;
+      }
+
       final elapsedDelta = nextElapsedSeconds - _elapsedSeconds;
       var shouldComplete = false;
       if (elapsedDelta > 0) {
@@ -762,12 +813,19 @@ class _QuestTimerScreenState extends State<QuestTimerScreen> {
           hasStarted: tick.elapsedSeconds > 0 || tick.isRunning,
         );
       } else {
+        if (!tick.isRunning) {
+          _stopLocalTicker();
+        }
         setState(() {
           _elapsedSeconds = nextElapsedSeconds;
           _quest = _quest.copyWith(elapsedSeconds: nextElapsedSeconds);
           _running = tick.isRunning;
           _hasStarted = tick.elapsedSeconds > 0 || tick.isRunning;
         });
+      }
+
+      if (tick.isRunning && _localTicker == null) {
+        _startLocalTicker();
       }
 
       if (shouldComplete) {
@@ -791,6 +849,17 @@ class _QuestTimerScreenState extends State<QuestTimerScreen> {
       snapshot.elapsedSeconds,
       _durationSeconds,
     );
+    if (nextElapsedSeconds < _elapsedSeconds) {
+      if (!snapshot.isRunning) {
+        _stopLocalTicker();
+      }
+      setState(() {
+        _running = snapshot.isRunning;
+        _hasStarted = _elapsedSeconds > 0 || snapshot.isRunning;
+      });
+      return;
+    }
+
     final elapsedDelta = nextElapsedSeconds - _elapsedSeconds;
     if (elapsedDelta > 0) {
       final shouldComplete = _advanceQuestProgress(
@@ -812,6 +881,7 @@ class _QuestTimerScreenState extends State<QuestTimerScreen> {
     }
 
     if (shouldStartCountdown) {
+      _startLocalTicker();
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) {
           return;

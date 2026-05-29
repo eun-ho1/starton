@@ -22,7 +22,12 @@ flutter run
 
 ```bash
 cd backend
-python -m venv .venv311
-.venv311/bin/pip install -r requirements.txt
-.venv311/bin/python -m app.main
+py -3.11 -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -r requirements.txt
+.\.venv\Scripts\python.exe -m app.main
 ```
+
+Windows note:
+
+- Prefer `.\.venv\Scripts\python.exe -m ...` over activating the environment and calling bare `python` or `pip`.
+- This avoids accidentally using `C:\msys64\...` or another global Python interpreter.

@@ -1,18 +1,36 @@
 import 'package:flutter/material.dart';
 import 'package:start_on/models/app_local_data.dart';
+import 'package:start_on/models/leaderboard_api_models.dart';
 import 'package:start_on/widgets/common.dart';
 
 class RankingScreen extends StatelessWidget {
-  const RankingScreen({super.key, required this.data});
+  const RankingScreen({
+    super.key,
+    required this.data,
+    this.leaderboard,
+  });
 
   final AppLocalData data;
+  final LeaderboardResponse? leaderboard;
 
   @override
   Widget build(BuildContext context) {
-    final score = _rankingScore(data);
-    final entries = _leaderboardEntries(data, score);
-    final currentRank = entries.indexWhere((entry) => entry.isCurrentUser) + 1;
-    final nextScore = currentRank > 1 ? entries[currentRank - 2].score : null;
+    final localScore = _rankingScore(data);
+    final entries = _leaderboardEntries(
+      data,
+      localScore,
+      leaderboard: leaderboard,
+    );
+    final currentEntryIndex = entries.indexWhere((entry) => entry.isCurrentUser);
+    final currentEntry = currentEntryIndex >= 0 ? entries[currentEntryIndex] : null;
+    final score = currentEntry?.score ?? localScore;
+    final currentRank =
+        currentEntry?.rank ??
+        leaderboard?.currentUserRank ??
+        currentEntryIndex + 1;
+    final safeRank = currentRank <= 0 ? entries.length : currentRank;
+    final nextEntry = currentEntryIndex > 0 ? entries[currentEntryIndex - 1] : null;
+    final nextScore = nextEntry?.score;
     final pointsToNext = nextScore == null
         ? 0
         : (nextScore - score + 1).clamp(0, nextScore);
@@ -21,7 +39,7 @@ class RankingScreen extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(22, 16, 22, 120),
       children: [
         _RankingHeroCard(
-          rank: currentRank,
+          rank: safeRank,
           totalCount: entries.length,
           score: score,
           pointsToNext: pointsToNext,
@@ -32,7 +50,7 @@ class RankingScreen extends StatelessWidget {
             Expanded(
               child: _RankingMetricCard(
                 icon: Icons.task_alt_rounded,
-                label: '완료 퀘스트',
+                label: '완료한 퀘스트',
                 value: '${data.completedQuestCount}',
                 color: const Color(0xFFFF7F88),
               ),
@@ -41,7 +59,7 @@ class RankingScreen extends StatelessWidget {
             Expanded(
               child: _RankingMetricCard(
                 icon: Icons.bolt_rounded,
-                label: '획득 경험치',
+                label: '획득한 EXP',
                 value: '${data.earnedExp}',
                 color: const Color(0xFF6F63FF),
               ),
@@ -51,11 +69,11 @@ class RankingScreen extends StatelessWidget {
         const SizedBox(height: 22),
         const SectionHeading(
           icon: Icons.emoji_events_outlined,
-          title: '이번 주 랭킹',
+          title: '주간 랭킹',
         ),
         const SizedBox(height: 14),
         for (var index = 0; index < entries.length; index++) ...[
-          _RankingRow(rank: index + 1, entry: entries[index]),
+          _RankingRow(entry: entries[index]),
           if (index != entries.length - 1) const SizedBox(height: 10),
         ],
       ],
@@ -140,7 +158,7 @@ class _RankingHeroCard extends StatelessWidget {
           ),
           const SizedBox(height: 24),
           Text(
-            '$rank위',
+            '#$rank',
             style: const TextStyle(
               color: Colors.white,
               fontSize: 42,
@@ -150,7 +168,7 @@ class _RankingHeroCard extends StatelessWidget {
           ),
           const SizedBox(height: 8),
           Text(
-            pointsToNext == 0 ? '현재 최상위 랭크' : '다음 순위까지 $pointsToNext pt',
+            pointsToNext == 0 ? '현재 1위입니다' : '다음 순위까지 $pointsToNext점 남았어요',
             style: const TextStyle(
               color: Colors.white,
               fontSize: 15,
@@ -225,9 +243,8 @@ class _RankingMetricCard extends StatelessWidget {
 }
 
 class _RankingRow extends StatelessWidget {
-  const _RankingRow({required this.rank, required this.entry});
+  const _RankingRow({required this.entry});
 
-  final int rank;
   final _RankingEntry entry;
 
   @override
@@ -249,7 +266,7 @@ class _RankingRow extends StatelessWidget {
           SizedBox(
             width: 32,
             child: Text(
-              '$rank',
+              '${entry.rank}',
               textAlign: TextAlign.center,
               style: TextStyle(
                 color: textColor,
@@ -314,6 +331,7 @@ class _RankingRow extends StatelessWidget {
 
 class _RankingEntry {
   const _RankingEntry({
+    required this.rank,
     required this.name,
     required this.subtitle,
     required this.score,
@@ -322,6 +340,7 @@ class _RankingEntry {
     this.isCurrentUser = false,
   });
 
+  final int rank;
   final String name;
   final String subtitle;
   final int score;
@@ -339,52 +358,67 @@ int _rankingScore(AppLocalData data) {
       data.clearedDungeonIds.length * 240;
 }
 
-List<_RankingEntry> _leaderboardEntries(AppLocalData data, int score) {
-  final entries = [
-    const _RankingEntry(
-      name: '새벽 러너',
-      subtitle: '주간 38개 완료',
-      score: 6420,
-      color: Color(0xFFFF7F88),
-      icon: Icons.directions_run_rounded,
-    ),
-    const _RankingEntry(
-      name: '집중 장인',
-      subtitle: '주간 31개 완료',
-      score: 5210,
-      color: Color(0xFF6F63FF),
-      icon: Icons.psychology_alt_rounded,
-    ),
-    const _RankingEntry(
-      name: '정리 마스터',
-      subtitle: '주간 24개 완료',
-      score: 4380,
-      color: Color(0xFF2EB67D),
-      icon: Icons.auto_awesome_motion_rounded,
-    ),
+List<_RankingEntry> _leaderboardEntries(
+  AppLocalData data,
+  int score, {
+  LeaderboardResponse? leaderboard,
+}) {
+  final serverEntries = leaderboard?.entries ?? const <LeaderboardEntryResponse>[];
+  if (serverEntries.isNotEmpty) {
+    return serverEntries
+        .map(
+          (entry) => _RankingEntry(
+            rank: entry.rank,
+            name: entry.userName,
+            subtitle: 'Lv.${entry.level} · 이번 주 ${entry.weeklyCompletedCount}개 완료',
+            score: entry.score,
+            color: entry.isCurrentUser
+                ? const Color(0xFFFFB84D)
+                : _colorForRankEntry(entry),
+            icon: entry.isCurrentUser
+                ? Icons.person_rounded
+                : _iconForRankEntry(entry),
+            isCurrentUser: entry.isCurrentUser,
+          ),
+        )
+        .toList();
+  }
+
+  return [
     _RankingEntry(
+      rank: 1,
       name: data.userName,
-      subtitle: '레벨 ${data.level} · 주간 ${data.weeklyCompletedCount}개 완료',
+      subtitle: 'Lv.${data.level} · 이번 주 ${data.weeklyCompletedCount}개 완료',
       score: score,
       color: const Color(0xFFFFB84D),
       icon: Icons.person_rounded,
       isCurrentUser: true,
     ),
-    const _RankingEntry(
-      name: '꾸준한 모험가',
-      subtitle: '주간 12개 완료',
-      score: 2140,
-      color: Color(0xFF4BA3FF),
-      icon: Icons.explore_rounded,
-    ),
-    const _RankingEntry(
-      name: '체크리스트 왕',
-      subtitle: '주간 8개 완료',
-      score: 1320,
-      color: Color(0xFF8F6BFF),
-      icon: Icons.checklist_rounded,
-    ),
-  ]..sort((a, b) => b.score.compareTo(a.score));
+  ];
+}
 
-  return entries;
+Color _colorForRankEntry(LeaderboardEntryResponse entry) {
+  if (entry.weeklyCompletionRate >= 90) {
+    return const Color(0xFFFF7F88);
+  }
+  if (entry.weeklyCompletedCount >= 10) {
+    return const Color(0xFF6F63FF);
+  }
+  if (entry.clearedDungeonCount > 0) {
+    return const Color(0xFF2EB67D);
+  }
+  return const Color(0xFF4BA3FF);
+}
+
+IconData _iconForRankEntry(LeaderboardEntryResponse entry) {
+  if (entry.weeklyCompletionRate >= 90) {
+    return Icons.local_fire_department_rounded;
+  }
+  if (entry.weeklyCompletedCount >= 10) {
+    return Icons.psychology_alt_rounded;
+  }
+  if (entry.clearedDungeonCount > 0) {
+    return Icons.workspace_premium_rounded;
+  }
+  return Icons.trending_up_rounded;
 }

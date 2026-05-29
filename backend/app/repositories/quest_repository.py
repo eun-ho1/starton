@@ -1,8 +1,18 @@
+from datetime import datetime
+from dataclasses import dataclass
 from typing import Any
 
 from app.repositories.base import QuestRecord, QuestRepository
 from app.schemas.quest_generation import QuestCandidateResponse
 from app.schemas.quest import QuestItemResponse
+
+
+@dataclass
+class NotionQuestUpsertSummary:
+    imported_count: int = 0
+    updated_count: int = 0
+    skipped_count: int = 0
+    stale_count: int = 0
 
 
 class SupabaseQuestRepository(QuestRepository):
@@ -13,15 +23,16 @@ class SupabaseQuestRepository(QuestRepository):
         response = (
             self._client.table("quests")
             .select(
-                "id, title, exp, difficulty, category, elapsed_seconds, "
-                "default_duration_seconds",
+                "id, client_quest_id, source, title, exp, difficulty, category, "
+                "elapsed_seconds, default_duration_seconds",
             )
             .eq("user_id", user_id)
             .eq("status", "active")
             .order("created_at", desc=True)
             .execute()
         )
-        return [_map_quest_row(row) for row in response.data or []]
+        rows = _deduplicate_notion_rows(response.data or [])
+        return [_map_quest_row(row) for row in rows]
 
     def create_quest(
         self,
@@ -127,19 +138,32 @@ class SupabaseQuestRepository(QuestRepository):
         source_reference: str,
         quests: list[QuestCandidateResponse],
         pages: list[dict[str, Any]],
-    ) -> None:
-        page_by_title = {
-            _page_title(page).strip().lower(): page
-            for page in pages
-            if _page_title(page).strip()
-        }
+    ) -> NotionQuestUpsertSummary:
+        # Intentionally do not reconcile against legacy Notion rows that were
+        # imported before external_source/external_id existed. Those rows can
+        # be title-based and ambiguous, so auto-merging would risk overwriting
+        # the wrong quest. New Notion sync integrity is anchored only on the
+        # stable Notion page identity encoded into client_quest_id. This keeps
+        # sync working even when external identity indexes are not present yet.
+        summary = NotionQuestUpsertSummary()
         for quest in quests:
-            page = page_by_title.get(quest.title.strip().lower())
-            page_id = page.get("id") if page else None
+            external_source = _normalize_external_source(quest.external_source)
+            external_id = _require_notion_external_id(
+                external_source=external_source,
+                external_id=quest.external_id,
+            )
+            client_quest_id = f"notion:{external_id}"
+            existing_row = _load_existing_notion_row(
+                self._client,
+                user_id=user_id,
+                external_source=external_source,
+                external_id=external_id,
+                client_quest_id=client_quest_id,
+            )
             payload = {
                 "user_id": user_id,
                 "profile_id": profile_id,
-                "client_quest_id": f"notion:{page_id}" if page_id else None,
+                "client_quest_id": client_quest_id,
                 "title": quest.title,
                 "exp": quest.exp,
                 "difficulty": quest.difficulty.value,
@@ -150,25 +174,40 @@ class SupabaseQuestRepository(QuestRepository):
                 "source": "notion",
                 "source_reference": source_reference,
             }
-            query = (
-                self._client.table("quests")
-                .select("id")
-                .eq("user_id", user_id)
-                .eq("source", "notion")
-                .eq("title", quest.title)
-                .limit(1)
-                .execute()
+            existing_external_updated_at = (
+                existing_row.get("external_updated_at")
+                if existing_row is not None
+                else None
             )
-            rows = query.data or []
-            if rows:
-                (
-                    self._client.table("quests")
-                    .update(payload)
-                    .eq("id", rows[0]["id"])
-                    .execute()
-                )
+            if not _should_apply_notion_update(
+                existing_external_updated_at=existing_external_updated_at,
+                incoming_external_updated_at=quest.external_updated_at,
+            ):
+                summary.skipped_count += 1
+                summary.stale_count += 1
+                continue
+
+            upsert_payload = {
+                **payload,
+                "external_source": external_source,
+                "external_id": external_id,
+                "external_url": quest.external_url,
+                "external_updated_at": _encode_datetime(quest.external_updated_at),
+                "deleted_at": None,
+            }
+            _write_notion_quest(
+                self._client,
+                user_id=user_id,
+                existing_row=existing_row,
+                payload=payload,
+                upsert_payload=upsert_payload,
+            )
+
+            if existing_row is None:
+                summary.imported_count += 1
             else:
-                self._client.table("quests").insert(payload).execute()
+                summary.updated_count += 1
+        return summary
 
 
 def _get_profile_id(client: Any, user_id: str) -> str:
@@ -212,6 +251,229 @@ def _ensure_mutation_succeeded(response: Any, message: str) -> None:
         raise ValueError(message)
 
 
+def _deduplicate_notion_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    seen_notion_ids: set[str] = set()
+    deduplicated: list[dict[str, Any]] = []
+    for row in rows:
+        client_quest_id = row.get("client_quest_id")
+        source = row.get("source")
+        is_notion_row = (
+            isinstance(source, str)
+            and source.strip().lower() == "notion"
+            and isinstance(client_quest_id, str)
+            and client_quest_id.strip()
+        )
+        if is_notion_row:
+            normalized_id = client_quest_id.strip()
+            if normalized_id in seen_notion_ids:
+                continue
+            seen_notion_ids.add(normalized_id)
+        deduplicated.append(row)
+    return deduplicated
+
+
+def _write_notion_quest(
+    client: Any,
+    *,
+    user_id: str,
+    existing_row: dict[str, Any] | None,
+    payload: dict[str, Any],
+    upsert_payload: dict[str, Any],
+) -> None:
+    if existing_row is not None:
+        _update_existing_notion_quest(
+            client,
+            user_id=user_id,
+            quest_id=existing_row["id"],
+            payload=payload,
+            upsert_payload=upsert_payload,
+        )
+        return
+
+    try:
+        client.table("quests").upsert(
+            upsert_payload,
+            on_conflict="user_id,client_quest_id",
+        ).execute()
+    except Exception as error:
+        if not _is_legacy_notion_schema_error(error):
+            raise
+        client.table("quests").upsert(
+            payload,
+            on_conflict="user_id,client_quest_id",
+        ).execute()
+
+
+def _update_existing_notion_quest(
+    client: Any,
+    *,
+    user_id: str,
+    quest_id: str,
+    payload: dict[str, Any],
+    upsert_payload: dict[str, Any],
+) -> None:
+    try:
+        response = (
+            client.table("quests")
+            .update(upsert_payload)
+            .eq("user_id", user_id)
+            .eq("id", quest_id)
+            .execute()
+        )
+    except Exception as error:
+        if not _is_legacy_notion_schema_error(error):
+            raise
+        response = (
+            client.table("quests")
+            .update(payload)
+            .eq("user_id", user_id)
+            .eq("id", quest_id)
+            .execute()
+        )
+    _ensure_mutation_succeeded(response, "Notion quest update did not affect any rows.")
+
+
+def _find_existing_notion_quest(
+    client: Any,
+    *,
+    user_id: str,
+    external_source: str,
+    external_id: str,
+) -> dict[str, Any] | None:
+    response = (
+        client.table("quests")
+        .select("id, external_updated_at")
+        .eq("user_id", user_id)
+        .eq("external_source", external_source)
+        .eq("external_id", external_id)
+        .limit(1)
+        .execute()
+    )
+    rows = response.data or []
+    return rows[0] if rows else None
+
+
+def _find_existing_legacy_notion_quest(
+    client: Any,
+    *,
+    user_id: str,
+    client_quest_id: str,
+) -> dict[str, Any] | None:
+    response = (
+        client.table("quests")
+        .select("id, external_updated_at")
+        .eq("user_id", user_id)
+        .eq("client_quest_id", client_quest_id)
+        .limit(1)
+        .execute()
+    )
+    rows = response.data or []
+    return rows[0] if rows else None
+
+
+def _load_existing_notion_row(
+    client: Any,
+    *,
+    user_id: str,
+    external_source: str,
+    external_id: str,
+    client_quest_id: str,
+) -> dict[str, Any] | None:
+    try:
+        existing = _find_existing_notion_quest(
+            client,
+            user_id=user_id,
+            external_source=external_source,
+            external_id=external_id,
+        )
+    except Exception as error:
+        if not _is_legacy_notion_schema_error(error):
+            raise
+        return _find_existing_legacy_notion_quest(
+            client,
+            user_id=user_id,
+            client_quest_id=client_quest_id,
+        )
+
+    if existing is not None:
+        return existing
+    return _find_existing_legacy_notion_quest(
+        client,
+        user_id=user_id,
+        client_quest_id=client_quest_id,
+    )
+
+
+def _should_apply_notion_update(
+    *,
+    existing_external_updated_at: object,
+    incoming_external_updated_at: object,
+) -> bool:
+    incoming_timestamp = _coerce_datetime(incoming_external_updated_at)
+    existing_timestamp = _coerce_datetime(existing_external_updated_at)
+
+    if existing_timestamp is None:
+        return True
+    if incoming_timestamp is None:
+        return False
+    return incoming_timestamp >= existing_timestamp
+
+
+def _coerce_datetime(value: object) -> datetime | None:
+    if isinstance(value, datetime):
+        return value
+    if not isinstance(value, str):
+        return None
+
+    normalized = value.strip()
+    if not normalized:
+        return None
+    if normalized.endswith("Z"):
+        normalized = f"{normalized[:-1]}+00:00"
+    try:
+        return datetime.fromisoformat(normalized)
+    except ValueError:
+        return None
+
+
+def _encode_datetime(value: datetime | None) -> str | None:
+    if value is None:
+        return None
+    return value.isoformat()
+
+
+def _is_legacy_notion_schema_error(error: Exception) -> bool:
+    message = str(error).lower()
+    return any(
+        keyword in message
+        for keyword in (
+            "external_source",
+            "external_id",
+            "external_url",
+            "external_updated_at",
+            "deleted_at",
+        )
+    )
+
+
+def _normalize_external_source(external_source: str | None) -> str:
+    normalized = (external_source or "").strip().lower()
+    return normalized or "notion"
+
+
+def _require_notion_external_id(
+    *,
+    external_source: str,
+    external_id: str | None,
+) -> str:
+    normalized_external_id = external_id.strip() if isinstance(external_id, str) else ""
+    if external_source == "notion" and not normalized_external_id:
+        raise ValueError(
+            "Notion quest upsert requires a non-empty external_id (page.id).",
+        )
+    return normalized_external_id
+
+
 def _map_quest_row(row: dict[str, Any]) -> QuestItemResponse:
     return QuestItemResponse(
         id=row["id"],
@@ -237,19 +499,3 @@ def _map_quest_record(row: dict[str, Any]) -> QuestRecord:
     )
 
 
-def _page_title(page: dict[str, Any]) -> str:
-    properties = page.get("properties", {})
-    if not isinstance(properties, dict):
-        return ""
-    for raw_property in properties.values():
-        if not isinstance(raw_property, dict):
-            continue
-        if raw_property.get("type") != "title":
-            continue
-        title_items = raw_property.get("title", [])
-        return "".join(
-            item.get("plain_text", "")
-            for item in title_items
-            if isinstance(item, dict)
-        ).strip()
-    return ""

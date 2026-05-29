@@ -3,6 +3,7 @@ from dataclasses import dataclass
 from datetime import datetime
 
 from app.schemas.dungeon import DungeonClearResponse, DungeonStatusResponse
+from app.schemas.leaderboard import LeaderboardResponse
 from app.schemas.profile import ProfileResponse
 from app.schemas.quest import CompletedQuestRecordSchema, QuestItemResponse
 from app.schemas.stats import StatsSummaryResponse
@@ -106,6 +107,18 @@ class CompletedQuestRepository(ABC):
         raise NotImplementedError
 
     @abstractmethod
+    def create_completed_task(
+        self,
+        user_id: str,
+        task: QuestRecord,
+        earned_exp: int,
+        completed_at: datetime,
+        elapsed_seconds: int,
+        proof_image_path: str | None = None,
+    ) -> tuple[str, CompletedQuestRecordSchema]:
+        raise NotImplementedError
+
+    @abstractmethod
     def create_recent_activity(
         self,
         user_id: str,
@@ -191,6 +204,17 @@ class StatsRepository(ABC):
         raise NotImplementedError
 
 
+class LeaderboardRepository(ABC):
+    @abstractmethod
+    def get_leaderboard(
+        self,
+        current_user_id: str,
+        *,
+        limit: int = 50,
+    ) -> LeaderboardResponse:
+        raise NotImplementedError
+
+
 class DungeonRepository(ABC):
     @abstractmethod
     def list_dungeons(self, user_id: str) -> list[DungeonStatusResponse]:
@@ -201,6 +225,5 @@ class DungeonRepository(ABC):
         self,
         user_id: str,
         dungeon_id: str,
-        credit_reward: int,
     ) -> DungeonClearResponse:
         raise NotImplementedError

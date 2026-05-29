@@ -1,3 +1,5 @@
+from datetime import datetime
+
 from pydantic import BaseModel, Field, model_validator
 
 from app.schemas.quest import QuestCategory, QuestDifficulty
@@ -43,6 +45,10 @@ class QuestCandidateResponse(BaseModel):
     exp: int
     defaultDurationSeconds: int
     reason: str | None = None
+    external_source: str | None = None
+    external_id: str | None = None
+    external_url: str | None = None
+    external_updated_at: datetime | None = None
 
 
 class QuestGenerationResponse(BaseModel):

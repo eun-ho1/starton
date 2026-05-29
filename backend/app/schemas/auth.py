@@ -6,6 +6,10 @@ class AuthEmailPasswordRequest(BaseModel):
     password: str
 
 
+class AuthRefreshRequest(BaseModel):
+    refreshToken: str
+
+
 class AuthUserResponse(BaseModel):
     id: str
     email: str | None = None

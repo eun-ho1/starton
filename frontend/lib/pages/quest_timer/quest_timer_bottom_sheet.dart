@@ -311,6 +311,9 @@ class _QuestTimerBottomSheetState extends State<QuestTimerBottomSheet> {
       _hasStarted = true;
     }
 
+    setState(() => _running = true);
+    _startLocalTicker();
+
     if (widget.notificationsEnabled) {
       await _questTimerService.startOrResumeTimer(
         questId: widget.quest.id,
@@ -318,19 +321,17 @@ class _QuestTimerBottomSheetState extends State<QuestTimerBottomSheet> {
         elapsedSeconds: _elapsedSeconds,
         defaultDurationSeconds: _durationSeconds,
       );
-    } else {
-      _startLocalTicker();
     }
-
-    if (!mounted) {
-      return;
-    }
-    setState(() => _running = true);
   }
 
   Future<void> _pauseTimer() async {
     if (_elapsedSeconds < _durationSeconds) {
       _countDownController.pause();
+    }
+
+    _stopLocalTicker();
+    if (mounted) {
+      setState(() => _running = false);
     }
 
     if (widget.notificationsEnabled) {
@@ -340,15 +341,11 @@ class _QuestTimerBottomSheetState extends State<QuestTimerBottomSheet> {
         elapsedSeconds: _elapsedSeconds,
         defaultDurationSeconds: _durationSeconds,
       );
-    } else {
-      _stopLocalTicker();
     }
 
     if (!mounted) {
       return;
     }
-
-    setState(() => _running = false);
     _notifyQuestChanged();
   }
 
@@ -383,11 +380,34 @@ class _QuestTimerBottomSheetState extends State<QuestTimerBottomSheet> {
         return;
       }
 
+      final nextElapsedSeconds = tick.elapsedSeconds.clamp(0, _durationSeconds);
+      if (_localTicker != null && tick.isRunning) {
+        return;
+      }
+
+      if (nextElapsedSeconds < _elapsedSeconds) {
+        if (!tick.isRunning) {
+          _stopLocalTicker();
+        }
+        setState(() {
+          _running = tick.isRunning;
+          _hasStarted = _elapsedSeconds > 0 || tick.isRunning;
+        });
+        _notifyQuestChanged();
+        return;
+      }
+
+      if (!tick.isRunning) {
+        _stopLocalTicker();
+      }
       setState(() {
-        _elapsedSeconds = tick.elapsedSeconds.clamp(0, _durationSeconds);
+        _elapsedSeconds = nextElapsedSeconds;
         _running = tick.isRunning;
         _hasStarted = tick.elapsedSeconds > 0 || tick.isRunning;
       });
+      if (tick.isRunning && _localTicker == null) {
+        _startLocalTicker();
+      }
       _notifyQuestChanged();
     });
   }
@@ -415,7 +435,7 @@ class _QuestTimerBottomSheetState extends State<QuestTimerBottomSheet> {
         title: completedQuest.title,
         difficulty: completedQuest.difficulty,
         category: completedQuest.category,
-        earnedExp: _elapsedSeconds ~/ 60,
+        earnedExp: completedQuest.exp,
         completedAt: DateTime.now().toIso8601String(),
         elapsedSeconds: _elapsedSeconds,
         subtasks: completedQuest.subtasks,

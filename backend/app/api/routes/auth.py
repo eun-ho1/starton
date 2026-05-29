@@ -4,6 +4,7 @@ from fastapi import APIRouter, HTTPException, status
 from app.core.config import settings
 from app.schemas.auth import (
     AuthEmailPasswordRequest,
+    AuthRefreshRequest,
     AuthSessionResponse,
     AuthUserResponse,
 )
@@ -28,6 +29,27 @@ async def sign_in(
         body={
             "email": payload.email,
             "password": payload.password,
+        },
+    )
+    return AuthSessionApiResponse(
+        success=True,
+        data=_build_session_response(data),
+        error=None,
+    )
+
+
+@router.post(
+    "/refresh",
+    response_model=AuthSessionApiResponse,
+    summary="Refresh a Supabase access token using refresh token",
+)
+async def refresh_session(
+    payload: AuthRefreshRequest,
+) -> AuthSessionApiResponse:
+    data = await _call_supabase_auth(
+        path="/auth/v1/token?grant_type=refresh_token",
+        body={
+            "refresh_token": payload.refreshToken,
         },
     )
     return AuthSessionApiResponse(

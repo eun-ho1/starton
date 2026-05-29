@@ -19,49 +19,137 @@ class NotionClientError(Exception):
 @dataclass(frozen=True)
 class ResolvedNotionSource:
     database_id: str
+    data_source_id: str
     database_title: str
+    database_url: str | None
     pages: list[dict]
 
 
 class NotionClient:
+    def validate_integration_secret(
+        self,
+        *,
+        notion_api_token: str,
+    ) -> None:
+        self._request_json(
+            method="GET",
+            path="/v1/users/me",
+            notion_api_token=notion_api_token,
+        )
+
     def resolve_source(
         self,
         *,
         notion_api_token: str,
+        data_source_id: str | None = None,
         database_id: str | None = None,
         database_url: str | None = None,
     ) -> ResolvedNotionSource:
-        resolved_database_id = extract_database_id(
+        preferred_data_source_id = normalize_database_id(data_source_id or "")
+        extracted_identifiers = extract_notion_identifiers(
+            data_source_id=data_source_id,
             database_id=database_id,
             database_url=database_url,
         )
-        if not resolved_database_id:
+        if not preferred_data_source_id and not extracted_identifiers:
             raise NotionClientError("Unable to resolve a valid Notion database identifier.")
 
-        try:
-            data_source = self.fetch_data_source(
-                notion_api_token=notion_api_token,
-                data_source_id=resolved_database_id,
-            )
-            pages = self.query_data_source_pages(
-                notion_api_token=notion_api_token,
-                data_source_id=resolved_database_id,
-            )
-            return ResolvedNotionSource(
-                database_id=resolved_database_id,
-                database_title=read_title_from_response(
-                    data_source,
-                    fallback="Notion Data Source",
-                ),
-                pages=pages,
-            )
-        except NotionClientError as error:
-            if not should_fallback_to_database(error):
-                raise
+        if preferred_data_source_id:
+            try:
+                return self._resolve_data_source(
+                    notion_api_token=notion_api_token,
+                    data_source_id=preferred_data_source_id,
+                    fallback_database_url=database_url,
+                    fallback_database_id=normalize_database_id(database_id or ""),
+                )
+            except NotionClientError as error:
+                if not should_fallback_to_database(error):
+                    raise
 
+        last_error: NotionClientError | None = None
+        for extracted_identifier in extracted_identifiers:
+            try:
+                return self._resolve_data_source(
+                    notion_api_token=notion_api_token,
+                    data_source_id=extracted_identifier,
+                    fallback_database_url=database_url,
+                )
+            except NotionClientError as error:
+                last_error = error
+                if not should_fallback_to_database(error):
+                    raise
+
+            try:
+                return self._resolve_database(
+                    notion_api_token=notion_api_token,
+                    database_id=extracted_identifier,
+                    fallback_database_url=database_url,
+                )
+            except NotionClientError as error:
+                last_error = error
+                if not should_fallback_to_page(error):
+                    raise
+
+            try:
+                return self._resolve_page_parent(
+                    notion_api_token=notion_api_token,
+                    page_id=extracted_identifier,
+                    fallback_database_url=database_url,
+                )
+            except NotionClientError as error:
+                last_error = error
+
+        if last_error is not None:
+            raise NotionClientError(
+                f"{last_error} Extracted Notion identifiers: {', '.join(extracted_identifiers)}",
+            ) from last_error
+        raise NotionClientError(
+            "Unable to resolve a valid Notion database identifier. "
+            f"Extracted Notion identifiers: {', '.join(extracted_identifiers)}",
+        )
+
+    def _resolve_data_source(
+        self,
+        *,
+        notion_api_token: str,
+        data_source_id: str,
+        fallback_database_url: str | None = None,
+        fallback_database_id: str | None = None,
+    ) -> ResolvedNotionSource:
+        data_source = self.fetch_data_source(
+            notion_api_token=notion_api_token,
+            data_source_id=data_source_id,
+        )
+        pages = self.query_data_source_pages(
+            notion_api_token=notion_api_token,
+            data_source_id=data_source_id,
+        )
+        database_id = (
+            extract_parent_database_id(data_source)
+            or fallback_database_id
+            or data_source_id
+        )
+        return ResolvedNotionSource(
+            database_id=database_id,
+            data_source_id=data_source_id,
+            database_title=read_title_from_response(
+                data_source,
+                fallback="Notion Data Source",
+            ),
+            database_url=fallback_database_url,
+            pages=pages,
+        )
+
+    def _resolve_database(
+        self,
+        *,
+        notion_api_token: str,
+        database_id: str,
+        fallback_database_url: str | None = None,
+    ) -> ResolvedNotionSource:
         database = self.fetch_database(
             notion_api_token=notion_api_token,
-            database_id=resolved_database_id,
+            database_id=database_id,
         )
         data_source_ids = extract_data_source_ids(database)
         if not data_source_ids:
@@ -73,12 +161,51 @@ class NotionClient:
             data_source_ids=data_source_ids,
         )
         return ResolvedNotionSource(
-            database_id=data_source_ids[0],
+            database_id=extract_parent_database_id(database) or database_id,
+            data_source_id=data_source_ids[0],
             database_title=read_title_from_response(
                 database,
                 fallback="Notion Database",
             ),
+            database_url=fallback_database_url,
             pages=pages,
+        )
+
+    def _resolve_page_parent(
+        self,
+        *,
+        notion_api_token: str,
+        page_id: str,
+        fallback_database_url: str | None = None,
+    ) -> ResolvedNotionSource:
+        page = self.fetch_page(
+            notion_api_token=notion_api_token,
+            page_id=page_id,
+        )
+        parent = page.get("parent")
+        if not isinstance(parent, dict):
+            raise NotionClientError(
+                "The provided Notion page is not connected to a database or data source.",
+            )
+
+        data_source_id = normalize_database_id(_read_parent_identifier(parent, "data_source_id"))
+        if data_source_id:
+            return self._resolve_data_source(
+                notion_api_token=notion_api_token,
+                data_source_id=data_source_id,
+                fallback_database_url=fallback_database_url,
+            )
+
+        database_id = normalize_database_id(_read_parent_identifier(parent, "database_id"))
+        if database_id:
+            return self._resolve_database(
+                notion_api_token=notion_api_token,
+                database_id=database_id,
+                fallback_database_url=fallback_database_url,
+            )
+
+        raise NotionClientError(
+            "The provided Notion page is not connected to a database or data source.",
         )
 
     def fetch_data_source(
@@ -102,6 +229,18 @@ class NotionClient:
         return self._request_json(
             method="GET",
             path=f"/v1/databases/{database_id}",
+            notion_api_token=notion_api_token,
+        )
+
+    def fetch_page(
+        self,
+        *,
+        notion_api_token: str,
+        page_id: str,
+    ) -> dict:
+        return self._request_json(
+            method="GET",
+            path=f"/v1/pages/{page_id}",
             notion_api_token=notion_api_token,
         )
 
@@ -172,16 +311,54 @@ class NotionClient:
             raise NotionClientError("Failed to decode Notion API response.") from error
 
 
-def extract_database_id(
+def extract_notion_identifier(
     *,
+    data_source_id: str | None = None,
     database_id: str | None = None,
     database_url: str | None = None,
 ) -> str:
-    for value in (database_id, database_url):
-        normalized = normalize_database_id(value or "")
-        if normalized:
-            return normalized
-    return ""
+    identifiers = extract_notion_identifiers(
+        data_source_id=data_source_id,
+        database_id=database_id,
+        database_url=database_url,
+    )
+    return identifiers[0] if identifiers else ""
+
+
+def extract_notion_identifiers(
+    *,
+    data_source_id: str | None = None,
+    database_id: str | None = None,
+    database_url: str | None = None,
+) -> list[str]:
+    identifiers: list[str] = []
+
+    def add_identifier(value: str) -> None:
+        if value and value not in identifiers:
+            identifiers.append(value)
+
+    normalized_data_source_id = normalize_database_id(data_source_id or "")
+    if normalized_data_source_id:
+        add_identifier(normalized_data_source_id)
+
+    normalized_database_id = normalize_database_id(database_id or "")
+    if normalized_database_id:
+        add_identifier(normalized_database_id)
+
+    if database_url:
+        for match in DATABASE_ID_PATTERN.finditer(database_url.strip()):
+            compact = match.group(0).replace("-", "")
+            add_identifier(
+                (
+                    f"{compact[0:8]}-"
+                    f"{compact[8:12]}-"
+                    f"{compact[12:16]}-"
+                    f"{compact[16:20]}-"
+                    f"{compact[20:32]}"
+                ),
+            )
+
+    return identifiers
 
 
 def normalize_database_id(value: str) -> str:
@@ -208,6 +385,26 @@ def extract_data_source_ids(database_payload: dict) -> list[str]:
     ]
 
 
+def extract_parent_database_id(payload: dict) -> str | None:
+    if not isinstance(payload, dict):
+        return None
+
+    parent = payload.get("parent")
+    if isinstance(parent, dict):
+        for key in ("database_id", "data_source_id"):
+            value = parent.get(key)
+            normalized = normalize_database_id(value) if isinstance(value, str) else ""
+            if normalized:
+                return normalized
+
+    for key in ("database_id", "source_database_id"):
+        value = payload.get(key)
+        normalized = normalize_database_id(value) if isinstance(value, str) else ""
+        if normalized:
+            return normalized
+    return None
+
+
 def read_title_from_response(response: dict, *, fallback: str) -> str:
     title_items = response.get("title", [])
     title = "".join(
@@ -225,6 +422,17 @@ def should_fallback_to_database(error: NotionClientError) -> bool:
         or ":validation_error:" in message
         or message.startswith("404:")
     )
+
+
+def should_fallback_to_page(error: NotionClientError) -> bool:
+    return should_fallback_to_database(error)
+
+
+def _read_parent_identifier(parent: dict, key: str) -> str:
+    value = parent.get(key)
+    if isinstance(value, str):
+        return value
+    return ""
 
 
 def merge_pages_from_data_sources(

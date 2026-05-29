@@ -1,4 +1,5 @@
 import 'package:start_on/models/api_response.dart';
+import 'package:start_on/models/quest_api_models.dart';
 import 'package:start_on/models/task_intake_api_models.dart';
 import 'package:start_on/services/api_client.dart';
 
@@ -85,6 +86,28 @@ class TaskIntakeRepository {
       response,
       code: 'missing_task_candidate',
       message: 'Server response did not include rejected task candidate data.',
+    );
+  }
+
+  Future<CompletedQuestRecordResponse> completeTask(
+    String taskId, {
+    required int elapsedSeconds,
+    String? proofImagePath,
+  }) async {
+    final response = await _apiClient
+        .postResponse<CompletedQuestRecordResponse>(
+          '/tasks/${Uri.encodeComponent(taskId)}/complete',
+          body: QuestCompleteRequest(
+            elapsedSeconds: elapsedSeconds,
+            proofImagePath: proofImagePath,
+          ).toJson(),
+          parseData: CompletedQuestRecordResponse.fromJson,
+        );
+
+    return _requireData(
+      response,
+      code: 'missing_completed_task',
+      message: 'Server response did not include the completed task record.',
     );
   }
 

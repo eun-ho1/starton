@@ -1,7 +1,11 @@
 class DungeonStatusResponse {
   const DungeonStatusResponse({
     required this.dungeonId,
+    required this.title,
+    required this.difficulty,
+    required this.completed,
     required this.cleared,
+    required this.canClaim,
     required this.creditReward,
     required this.clearedAt,
   });
@@ -11,14 +15,22 @@ class DungeonStatusResponse {
 
     return DungeonStatusResponse(
       dungeonId: _readString(object, 'dungeonId'),
+      title: _readString(object, 'title'),
+      difficulty: _readString(object, 'difficulty'),
+      completed: _readBool(object, 'completed'),
       cleared: _readBool(object, 'cleared'),
+      canClaim: _readBool(object, 'canClaim'),
       creditReward: _readInt(object, 'creditReward'),
       clearedAt: _readOptionalString(object, 'clearedAt'),
     );
   }
 
   final String dungeonId;
+  final String title;
+  final String difficulty;
+  final bool completed;
   final bool cleared;
+  final bool canClaim;
   final int creditReward;
   final String? clearedAt;
 }

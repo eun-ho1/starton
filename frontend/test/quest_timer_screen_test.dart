@@ -76,6 +76,130 @@ void main() {
       ]);
     },
   );
+
+  testWidgets('edit page AI button requests suggestion flow', (tester) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+
+    QuestItem? requestedOriginalQuest;
+    QuestItem? requestedDraft;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Builder(
+          builder: (context) {
+            return TextButton(
+              onPressed: () {
+                Navigator.of(context).push<Object?>(
+                  MaterialPageRoute<Object?>(
+                    builder: (_) => QuestTimerScreen(
+                      quest: _simpleQuest(),
+                      userLevel: 1,
+                      notificationsEnabled: false,
+                      onAiSuggestionRequested:
+                          ({
+                            required QuestItem originalQuest,
+                            required QuestItem draft,
+                          }) async {
+                            requestedOriginalQuest = originalQuest;
+                            requestedDraft = draft;
+                            return draft.copyWith(title: 'AI 제안 결과');
+                          },
+                    ),
+                  ),
+                );
+              },
+              child: const Text('open timer'),
+            );
+          },
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('open timer'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byIcon(Icons.edit_rounded));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('AI 제안 페이지로 이동'));
+    await tester.pumpAndSettle();
+
+    expect(requestedOriginalQuest?.id, 'quest-simple');
+    expect(requestedDraft?.title, '단일 작업');
+    expect(find.text('AI 제안 결과'), findsOneWidget);
+  });
+
+  testWidgets('edit page delete button returns delete result', (tester) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+
+    Object? result;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Builder(
+          builder: (context) {
+            return TextButton(
+              onPressed: () {
+                Navigator.of(context)
+                    .push<Object?>(
+                      MaterialPageRoute<Object?>(
+                        builder: (_) => QuestTimerScreen(
+                          quest: _timedSubtaskQuest(),
+                          userLevel: 1,
+                          notificationsEnabled: false,
+                        ),
+                      ),
+                    )
+                    .then((value) => result = value);
+              },
+              child: const Text('open timer'),
+            );
+          },
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('open timer'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byIcon(Icons.edit_rounded));
+    await tester.pumpAndSettle();
+
+    expect(find.text('퀘스트 수정'), findsOneWidget);
+    expect(find.byTooltip('퀘스트 삭제'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('퀘스트 삭제'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('퀘스트 삭제'), findsOneWidget);
+
+    await tester.tap(find.widgetWithText(TextButton, '삭제'));
+    await tester.pumpAndSettle();
+
+    expect(result, isA<QuestTimerDeleteResult>());
+    expect((result! as QuestTimerDeleteResult).quest.id, 'quest-1');
+  });
+}
+
+QuestItem _simpleQuest() {
+  return QuestItem(
+    id: 'quest-simple',
+    title: '단일 작업',
+    exp: 50,
+    difficulty: '보통',
+    category: 'work',
+    elapsedSeconds: 0,
+    defaultDurationSeconds: 25 * 60,
+  );
 }
 
 QuestItem _timedSubtaskQuest() {

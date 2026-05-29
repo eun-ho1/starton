@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:start_on/models/auth_models.dart';
 import 'package:start_on/services/api_client.dart';
 import 'package:start_on/storage/auth_session_store.dart';
 
@@ -98,6 +99,67 @@ void main() {
             .having((error) => error.code, 'code', 'network_error'),
       ),
     );
+  });
+
+  test('authenticated client refreshes expired token and retries once', () async {
+    await const AuthSessionStore().save(
+      const AuthSession(
+        userId: 'user-1',
+        email: 'tester@starton.local',
+        displayName: 'Tester',
+        accessToken: 'expired-token',
+        refreshToken: 'refresh-token',
+      ),
+    );
+
+    var profileAttempts = 0;
+    final apiClient = ApiClient.authenticated(
+      baseUrl: 'http://localhost/api/v1',
+      httpClient: MockClient((request) async {
+        if (request.url.path.endsWith('/auth/refresh')) {
+          return http.Response(
+            jsonEncode({
+              'success': true,
+              'data': const AuthSessionResponse(
+                accessToken: 'new-access-token',
+                refreshToken: 'new-refresh-token',
+                user: AuthUserResponse(
+                  id: 'user-1',
+                  email: 'tester@starton.local',
+                ),
+              ).toJson(),
+              'error': null,
+            }),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }
+
+        profileAttempts += 1;
+        if (profileAttempts == 1) {
+          return http.Response(
+            jsonEncode({
+              'detail': {
+                'code': 'invalid_token',
+                'message': 'Supabase access token validation failed.',
+              },
+            }),
+            401,
+            headers: {'content-type': 'application/json'},
+          );
+        }
+
+        expect(request.headers['Authorization'], 'Bearer new-access-token');
+        return _okResponse();
+      }),
+    );
+
+    await apiClient.get('/profile');
+
+    final session = await const AuthSessionStore().load();
+    expect(profileAttempts, 2);
+    expect(session?.accessToken, 'new-access-token');
+    expect(session?.refreshToken, 'new-refresh-token');
   });
 }
 

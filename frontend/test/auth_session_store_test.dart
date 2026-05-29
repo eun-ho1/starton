@@ -45,6 +45,20 @@ void main() {
     expect(await store.loadAccessToken(), 'access-token');
   });
 
+  test('loads trimmed refresh token when present', () async {
+    await store.save(
+      const AuthSession(
+        userId: 'user-1',
+        email: 'tester@starton.local',
+        displayName: 'Tester',
+        accessToken: 'access-token',
+        refreshToken: ' refresh-token ',
+      ),
+    );
+
+    expect(await store.loadRefreshToken(), 'refresh-token');
+  });
+
   test('removes refresh token key when refresh token is null', () async {
     await store.save(
       const AuthSession(

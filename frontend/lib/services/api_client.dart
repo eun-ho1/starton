@@ -2,8 +2,10 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:start_on/models/api_response.dart';
+import 'package:start_on/models/auth_models.dart';
 import 'package:start_on/storage/auth_session_store.dart';
 
 typedef AuthTokenProvider = FutureOr<String?> Function();
@@ -13,10 +15,12 @@ class ApiClient {
     String? baseUrl,
     http.Client? httpClient,
     AuthTokenProvider? authTokenProvider,
+    AuthSessionStore? authSessionStore,
     Duration timeout = const Duration(seconds: 20),
-  }) : baseUrl = _normalizeBaseUrl(baseUrl ?? _defaultBaseUrl),
+  }) : baseUrl = _normalizeBaseUrl(baseUrl ?? resolveDefaultBaseUrl()),
        _httpClient = httpClient ?? http.Client(),
        _authTokenProvider = authTokenProvider,
+       _authSessionStore = authSessionStore,
        _timeout = timeout;
 
   ApiClient.authenticated({
@@ -28,18 +32,38 @@ class ApiClient {
          baseUrl: baseUrl,
          httpClient: httpClient,
          authTokenProvider: authSessionStore.loadAccessToken,
+         authSessionStore: authSessionStore,
          timeout: timeout,
        );
 
-  static const String _defaultBaseUrl = String.fromEnvironment(
+  static const String _configuredBaseUrl = String.fromEnvironment(
     'START_ON_API_BASE_URL',
-    defaultValue: 'http://192.168.219.170:8000/api/v1',
+    defaultValue: '',
   );
+
+  static const String _androidEmulatorBaseUrl = 'http://10.0.2.2:8000/api/v1';
+  static const String _localhostBaseUrl = 'http://127.0.0.1:8000/api/v1';
 
   final String baseUrl;
   final http.Client _httpClient;
   final AuthTokenProvider? _authTokenProvider;
+  final AuthSessionStore? _authSessionStore;
   final Duration _timeout;
+
+  static String resolveDefaultBaseUrl() {
+    if (_configuredBaseUrl.isNotEmpty) {
+      return _configuredBaseUrl;
+    }
+
+    if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
+      // Android Emulator maps the host machine's localhost to 10.0.2.2,
+      // so a FastAPI server started with uvicorn --host 0.0.0.0 --port 8000
+      // is reachable there without depending on the host Wi-Fi IP address.
+      return _androidEmulatorBaseUrl;
+    }
+
+    return _localhostBaseUrl;
+  }
 
   Future<dynamic> get(String path, {Map<String, String>? queryParameters}) {
     return request('GET', path, queryParameters: queryParameters);
@@ -81,16 +105,47 @@ class ApiClient {
     Map<String, String>? queryParameters,
   }) async {
     final uri = _buildUri(path, queryParameters);
-    final headers = await _buildHeaders();
     final encodedBody = body == null ? null : jsonEncode(body);
 
-    final http.Response response;
+    var response = await _sendWithHandling(
+      method.toUpperCase(),
+      uri,
+      headers: await _buildHeaders(),
+      body: encodedBody,
+    );
+
+    if (_shouldTryRefresh(response, path)) {
+      final refreshed = await _refreshSession();
+      if (refreshed) {
+        response = await _sendWithHandling(
+          method.toUpperCase(),
+          uri,
+          headers: await _buildHeaders(),
+          body: encodedBody,
+        );
+      }
+    }
+
+    final decodedBody = _decodeResponseBody(response);
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw ApiClientException.fromResponse(response, decodedBody);
+    }
+
+    return decodedBody;
+  }
+
+  Future<http.Response> _sendWithHandling(
+    String method,
+    Uri uri, {
+    required Map<String, String> headers,
+    String? body,
+  }) async {
     try {
-      response = await _send(
-        method.toUpperCase(),
+      return await _send(
+        method,
         uri,
         headers: headers,
-        body: encodedBody,
+        body: body,
       ).timeout(_timeout);
     } on TimeoutException catch (error) {
       throw ApiClientException(
@@ -114,13 +169,6 @@ class ApiClient {
         cause: error,
       );
     }
-
-    final decodedBody = _decodeResponseBody(response);
-    if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw ApiClientException.fromResponse(response, decodedBody);
-    }
-
-    return decodedBody;
   }
 
   Future<ApiResponse<T>> getResponse<T>(
@@ -233,6 +281,69 @@ class ApiClient {
     }
 
     return headers;
+  }
+
+  bool _shouldTryRefresh(http.Response response, String path) {
+    if (_authSessionStore == null || path == '/auth/refresh') {
+      return false;
+    }
+    if (response.statusCode != 401) {
+      return false;
+    }
+    final decodedBody = _decodeResponseBody(response);
+    final exception = ApiClientException.fromResponse(response, decodedBody);
+    return exception.code == 'invalid_token';
+  }
+
+  Future<bool> _refreshSession() async {
+    final authSessionStore = _authSessionStore;
+    if (authSessionStore == null) {
+      return false;
+    }
+
+    final currentSession = await authSessionStore.load();
+    final refreshToken = currentSession?.refreshToken?.trim();
+    if (currentSession == null || refreshToken == null || refreshToken.isEmpty) {
+      await authSessionStore.clear();
+      return false;
+    }
+
+    final refreshUri = _buildUri('/auth/refresh', null);
+    final refreshResponse = await _sendWithHandling(
+      'POST',
+      refreshUri,
+      headers: const {
+        'Accept': 'application/json',
+        'Content-Type': 'application/json',
+      },
+      body: jsonEncode({'refreshToken': refreshToken}),
+    );
+    if (refreshResponse.statusCode < 200 || refreshResponse.statusCode >= 300) {
+      await authSessionStore.clear();
+      return false;
+    }
+
+    final decodedBody = _decodeResponseBody(refreshResponse);
+    final apiResponse = ApiResponse<AuthSessionResponse>.fromJson(
+      decodedBody,
+      AuthSessionResponse.fromJson,
+    );
+    final sessionData = apiResponse.data;
+    if (!apiResponse.success || sessionData == null) {
+      await authSessionStore.clear();
+      return false;
+    }
+
+    await authSessionStore.save(
+      AuthSession(
+        userId: sessionData.user.id,
+        email: sessionData.user.email ?? currentSession.email,
+        displayName: currentSession.displayName,
+        accessToken: sessionData.accessToken,
+        refreshToken: sessionData.refreshToken,
+      ),
+    );
+    return true;
   }
 
   Future<http.Response> _send(

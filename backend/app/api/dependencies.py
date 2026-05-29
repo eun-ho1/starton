@@ -3,9 +3,10 @@ from fastapi import Depends
 from app.core.auth import AuthenticatedUser, get_current_user
 from app.core.crypto import get_secret_cipher
 from app.core.supabase import get_supabase_client
-from app.repositories.base import CompletedQuestRepository, ProfileRepository, QuestRepository, StatsRepository
+from app.repositories.base import CompletedQuestRepository, LeaderboardRepository, ProfileRepository, QuestRepository, StatsRepository
 from app.repositories.completed_quest_repository import SupabaseCompletedQuestRepository
 from app.repositories.dungeon_repository import SupabaseDungeonRepository
+from app.repositories.leaderboard_repository import SupabaseLeaderboardRepository
 from app.repositories.mediator_run_repository import SupabaseMediatorRunRepository
 from app.repositories.notion_connection_repository import NotionConnectionRepository
 from app.repositories.profile_repository import SupabaseProfileRepository
@@ -24,12 +25,14 @@ from app.services.ai_quest_service import AIQuestService
 from app.services.notion_backend_service import NotionBackendService
 from app.services.dungeon_service import DungeonService
 from app.services.intake_service import IntakeService
+from app.services.leaderboard_service import LeaderboardService
 from app.services.mediator_service import MediatorService
 from app.services.profile_service import ProfileService
 from app.services.quest_service import QuestService
 from app.services.stats_service import StatsService
 from app.services.task_candidate_review_service import TaskCandidateReviewService
 from app.services.task_commit_service import TaskCommitService
+from app.services.task_service import TaskService
 from app.services.today_planning_service import TodayPlanningService
 
 def get_current_user_id(
@@ -82,6 +85,10 @@ def get_stats_repository() -> StatsRepository:
     return SupabaseStatsRepository(get_supabase_client())
 
 
+def get_leaderboard_repository() -> LeaderboardRepository:
+    return SupabaseLeaderboardRepository(get_supabase_client())
+
+
 def get_quest_service() -> QuestService:
     return QuestService(
         get_quest_repository(),
@@ -97,6 +104,10 @@ def get_profile_service() -> ProfileService:
 
 def get_stats_service() -> StatsService:
     return StatsService(get_stats_repository())
+
+
+def get_leaderboard_service() -> LeaderboardService:
+    return LeaderboardService(get_leaderboard_repository())
 
 
 def get_today_planning_service() -> TodayPlanningService:
@@ -128,6 +139,16 @@ def get_task_commit_service() -> TaskCommitService:
     return TaskCommitService(
         task_candidate_repository=get_task_candidate_repository(),
         task_repository=get_task_repository(),
+    )
+
+
+def get_task_service() -> TaskService:
+    return TaskService(
+        task_repository=get_task_repository(),
+        raw_input_repository=get_raw_input_repository(),
+        completed_quest_repository=get_completed_quest_repository(),
+        profile_repository=get_profile_repository(),
+        stats_repository=get_stats_repository(),
     )
 
 

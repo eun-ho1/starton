@@ -84,4 +84,8 @@ class QuestGenerationService:
                 candidate.difficulty,
             ),
             reason=candidate.reason,
+            external_source=candidate.external_source,
+            external_id=candidate.external_id,
+            external_url=candidate.external_url,
+            external_updated_at=candidate.external_updated_at,
         )

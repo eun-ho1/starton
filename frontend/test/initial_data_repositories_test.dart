@@ -76,7 +76,11 @@ void main() {
           dungeons: [
             DungeonStatusResponse(
               dungeonId: 'dungeon_meditation',
+              title: 'Meditation',
+              difficulty: 'easy',
+              completed: true,
               cleared: true,
+              canClaim: false,
               creditReward: 8,
               clearedAt: '2026-05-09T12:00:00',
             ),

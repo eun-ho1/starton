@@ -36,3 +36,51 @@ class NotionSyncResponse(BaseModel):
     database_id: str
     database_title: str
     quests: list[QuestCandidateResponse]
+    imported_count: int = 0
+    updated_count: int = 0
+    skipped_count: int = 0
+    stale_count: int = 0
+
+
+class NotionConnectionStatusResponse(BaseModel):
+    connected: bool = Field(
+        description="True when the saved Notion connection is still active.",
+    )
+    connection_id: str | None = Field(
+        default=None,
+        description="Stable backend identifier for the saved Notion connection row.",
+    )
+    database_id: str | None = Field(
+        default=None,
+        description="Resolved Notion database or data source identifier in snake_case JSON.",
+    )
+    data_source_id: str | None = Field(
+        default=None,
+        description="Resolved Notion data source identifier in snake_case JSON.",
+    )
+    database_title: str | None = Field(
+        default=None,
+        description="Human-readable Notion database or data source title.",
+    )
+    database_url: str | None = Field(
+        default=None,
+        description="Canonical Notion database URL when available.",
+    )
+    last_synced_at: str | None = Field(
+        default=None,
+        description="Last sync attempt timestamp as an ISO-8601 string, or null.",
+    )
+    last_successful_synced_at: str | None = Field(
+        default=None,
+        description="Last successful sync timestamp as an ISO-8601 string, or null.",
+    )
+    sync_status: str | None = Field(
+        default=None,
+        description="Public sync status value in snake_case JSON.",
+    )
+    last_error_message: str | None = Field(
+        default=None,
+        description=(
+            "Sanitized client-safe error summary for the most recent Notion sync failure."
+        ),
+    )

@@ -3,7 +3,8 @@
 ## Install
 
 ```bash
-.\.venv311\Scripts\python.exe -m pip install -r requirements.txt
+py -3.11 -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -r requirements.txt
 ```
 
 ## Environment Variables
@@ -23,6 +24,7 @@ SUPABASE_URL=https://your-project-ref.supabase.co
 SUPABASE_SERVICE_ROLE_KEY=your-supabase-service-role-key
 SUPABASE_ANON_KEY=your-supabase-anon-key
 GEMINI_API_KEY=your-gemini-api-key
+NOTION_TOKEN_ENCRYPTION_KEY=your-fernet-key-generated-by-cryptography-fernet
 ```
 
 The backend reads `backend/.env` even if the server is started from the project root.
@@ -30,26 +32,32 @@ The backend reads `backend/.env` even if the server is started from the project 
 Required at startup:
 - `SUPABASE_URL`
 - `SUPABASE_SERVICE_ROLE_KEY`
-
-Optional unless you use the related feature:
 - `SUPABASE_ANON_KEY`
-- `GEMINI_API_KEY`
 - `NOTION_TOKEN_ENCRYPTION_KEY`
 
-Notion tokens are handled per request and are not stored on the server.
+`NOTION_TOKEN_ENCRYPTION_KEY` must be a non-empty Fernet key in the format expected by `cryptography.fernet.Fernet`, which is a URL-safe base64-encoded 32-byte key. A valid example can be generated with:
+
+```bash
+python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+```
+
+Optional unless you use the related feature:
+- `GEMINI_API_KEY`
+
+Notion tokens are encrypted before being stored on the server.
 
 ## Run
 
 Run the command inside the `backend` directory.
 
 ```bash
-.\.venv311\Scripts\python.exe -m app.main
+.\.venv\Scripts\python.exe -m app.main
 ```
 
 If you prefer `uvicorn` directly, use:
 
 ```bash
-.\.venv311\Scripts\python.exe -m uvicorn app.main:app --host 0.0.0.0 --port 8000
+.\.venv\Scripts\python.exe -m uvicorn app.main:app --host 0.0.0.0 --port 8000
 ```
 
 Or use the included launcher:
@@ -60,9 +68,11 @@ Or use the included launcher:
 
 Windows note:
 
+- If an existing `.venv` was copied or the project folder was renamed, recreate the virtual environment before installing again.
 - In some Windows environments, `--reload` can fail during Uvicorn's reloader startup with `PermissionError: [WinError 5]`.
 - If that happens, keep `API_RELOAD=false` and run without `--reload`.
 - Do not run bare `python` or bare `uvicorn` if your shell resolves to `C:\msys64\ucrt64\bin\python.exe` or `C:\msys64\ucrt64\bin\uvicorn.exe`.
+- Prefer `.\.venv\Scripts\python.exe -m pip ...` instead of `pip ...` so the interpreter and installer always match.
 - If you see `C:\msys64\...` in the traceback, you are not using the project virtual environment.
 
 Open:
@@ -186,6 +196,12 @@ Response:
 ```
 
 ### Notion Sync
+
+Behavior note:
+
+- New Notion sync rows are deduplicated only by `(user_id, external_source, external_id)`.
+- Legacy Notion-imported quest rows with null `external_source` or `external_id` are not auto-merged by title.
+- This means the first sync after upgrading can leave a legacy row and a new external-id-backed row side by side for the same apparent task. That is intentional to avoid ambiguous overwrite of older data.
 
 Request:
 

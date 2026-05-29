@@ -22,6 +22,7 @@ class HomeQuestCard extends StatelessWidget {
     final categoryStyle = _categoryStyleFor(quest.category);
     final categoryLabel = questCategoryLabel(quest.category).toUpperCase();
     final elapsedLabel = _formatElapsedSeconds(quest.elapsedSeconds);
+    final difficultyLevel = _questDifficultyLevel(quest.difficulty);
 
     return neu.Neumorphic(
       style: neu.NeumorphicStyle(
@@ -136,6 +137,29 @@ class HomeQuestCard extends StatelessWidget {
                     ],
                   ),
                 ),
+                const SizedBox(width: 14),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Text(
+                      'Lv.$difficultyLevel',
+                      style: const TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w800,
+                        color: Color(0xFF33415C),
+                      ),
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      '${quest.exp} EXP',
+                      style: const TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                        color: Color(0xFF98A2B3),
+                      ),
+                    ),
+                  ],
+                ),
                 const SizedBox(width: 12),
                 GestureDetector(
                   onTap: onTap,
@@ -175,6 +199,14 @@ String _formatElapsedSeconds(int elapsedSeconds) {
   final hours = (elapsedSeconds ~/ 3600).toString().padLeft(2, '0');
   final minutes = ((elapsedSeconds % 3600) ~/ 60).toString().padLeft(2, '0');
   return '$hours:$minutes';
+}
+
+int _questDifficultyLevel(String difficulty) {
+  return switch (normalizeQuestDifficulty(difficulty)) {
+    '쉬움' => 1,
+    '보통' => 2,
+    _ => 3,
+  };
 }
 
 _HomeQuestCategoryStyle _categoryStyleFor(String category) {

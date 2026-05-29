@@ -1,10 +1,10 @@
-from cryptography.fernet import Fernet
-
 from app.core.config import settings
 
 
 class SecretCipher:
     def __init__(self, key: str) -> None:
+        from cryptography.fernet import Fernet
+
         self._fernet = Fernet(key.encode("utf-8"))
 
     def encrypt(self, value: str) -> str:
