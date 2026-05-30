@@ -1,6 +1,7 @@
 import logging
 
 from fastapi import FastAPI, Request
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 import uvicorn
 
@@ -59,6 +60,22 @@ def register_exception_handlers(app: FastAPI) -> None:
         )
 
 
+def configure_cors(app: FastAPI) -> None:
+    allowed_origins = settings.cors_allowed_origins
+    if not allowed_origins:
+        logger.info("CORS middleware disabled because no web origins were configured.")
+        return
+
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=allowed_origins,
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+    logger.info("Enabled CORS for %s", ", ".join(allowed_origins))
+
+
 def create_app() -> FastAPI:
     configure_logging()
     app = FastAPI(
@@ -69,6 +86,7 @@ def create_app() -> FastAPI:
         redoc_url="/redoc",
     )
     register_exception_handlers(app)
+    configure_cors(app)
 
     @app.on_event("startup")
     async def validate_external_clients() -> None:

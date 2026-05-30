@@ -31,3 +31,10 @@ Windows note:
 
 - Prefer `.\.venv\Scripts\python.exe -m ...` over activating the environment and calling bare `python` or `pip`.
 - This avoids accidentally using `C:\msys64\...` or another global Python interpreter.
+
+## Deployment
+
+- Frontend deployment guide: [docs/deployment_vercel_railway.md](/c:/mobile-programming/docs/deployment_vercel_railway.md)
+- Recommended setup:
+  - `frontend/` -> Vercel
+  - `backend/` -> Railway

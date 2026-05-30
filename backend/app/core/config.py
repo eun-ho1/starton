@@ -3,7 +3,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import cast
 
-from pydantic import Field, model_validator
+from pydantic import AliasChoices, Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -19,9 +19,17 @@ class Settings(BaseSettings):
     environment: str = Field(default="development", alias="APP_ENV")
     log_level: str = Field(default="INFO", alias="LOG_LEVEL")
     api_host: str = Field(default="0.0.0.0", alias="API_HOST")
-    api_port: int = Field(default=8000, alias="API_PORT")
+    api_port: int = Field(
+        default=8000,
+        alias="API_PORT",
+        validation_alias=AliasChoices("API_PORT", "PORT"),
+    )
     api_reload: bool = Field(default=False, alias="API_RELOAD")
     api_v1_prefix: str = Field(default="/api/v1", alias="API_V1_PREFIX")
+    web_cors_allowed_origins: str = Field(
+        default="",
+        alias="WEB_CORS_ALLOWED_ORIGINS",
+    )
     app_description: str = Field(
         default=(
             "FastAPI backend for Start On. "
@@ -71,6 +79,17 @@ class Settings(BaseSettings):
             )
 
         return self
+
+    @property
+    def cors_allowed_origins(self) -> list[str]:
+        return [
+            origin
+            for origin in (
+                item.strip()
+                for item in self.web_cors_allowed_origins.split(",")
+            )
+            if origin
+        ]
 
 
 @lru_cache(maxsize=1)

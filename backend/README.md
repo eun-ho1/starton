@@ -20,6 +20,7 @@ API_HOST=0.0.0.0
 API_PORT=8000
 API_RELOAD=false
 API_V1_PREFIX=/api/v1
+WEB_CORS_ALLOWED_ORIGINS=http://localhost:3000,http://127.0.0.1:3000
 SUPABASE_URL=https://your-project-ref.supabase.co
 SUPABASE_SERVICE_ROLE_KEY=your-supabase-service-role-key
 SUPABASE_ANON_KEY=your-supabase-anon-key
@@ -45,6 +46,17 @@ Optional unless you use the related feature:
 - `GEMINI_API_KEY`
 
 Notion tokens are encrypted before being stored on the server.
+
+For browser-based clients such as the Vercel-hosted Flutter web app, set
+`WEB_CORS_ALLOWED_ORIGINS` to a comma-separated list of allowed origins.
+Example:
+
+```env
+WEB_CORS_ALLOWED_ORIGINS=https://your-app.vercel.app,https://your-preview.vercel.app
+```
+
+On Railway, the platform-provided `PORT` environment variable is also accepted,
+so you do not need to hardcode `API_PORT` for production.
 
 ## Run
 
