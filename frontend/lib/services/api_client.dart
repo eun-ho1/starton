@@ -153,14 +153,14 @@ class ApiClient {
         message: 'API server response timed out.',
         cause: error,
       );
-    } on SocketException catch (error) {
+    } on http.ClientException catch (error) {
       throw ApiClientException(
         statusCode: 0,
         code: 'network_error',
         message: 'Failed to reach API server.',
         cause: error,
       );
-    } on http.ClientException catch (error) {
+    } on Exception catch (error) {
       throw ApiClientException(
         statusCode: 0,
         code: 'network_error',

@@ -953,7 +953,7 @@ class _AdFocusShellState extends State<AdFocusShell>
       ),
     );
 
-    if (result?.changeAccount == true) {
+    if (result?.shouldChangeAccount == true) {
       await widget.onChangeAccount();
       return;
     }

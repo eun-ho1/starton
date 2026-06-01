@@ -9,14 +9,16 @@ import 'package:start_on/widgets/common.dart';
 
 class SettingsScreenResult {
   const SettingsScreenResult._({
-    this.changeAccount = false,
+    this.shouldChangeAccount = false,
     this.didSyncNotion = false,
   });
 
-  static const changeAccount = SettingsScreenResult._(changeAccount: true);
-  static const notionSynced = SettingsScreenResult._(didSyncNotion: true);
+  static const requestAccountChange = SettingsScreenResult._(
+    shouldChangeAccount: true,
+  );
+  static const syncedNotion = SettingsScreenResult._(didSyncNotion: true);
 
-  final bool changeAccount;
+  final bool shouldChangeAccount;
   final bool didSyncNotion;
 }
 
@@ -638,12 +640,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   void _requestAccountChange() {
-    Navigator.of(context).pop(SettingsScreenResult.changeAccount);
+    Navigator.of(context).pop(SettingsScreenResult.requestAccountChange);
   }
 
   void _closeSettings() {
     Navigator.of(context).pop(
-      _didSyncNotionThisSession ? SettingsScreenResult.notionSynced : null,
+      _didSyncNotionThisSession ? SettingsScreenResult.syncedNotion : null,
     );
   }
 
