@@ -953,13 +953,15 @@ class _AdFocusShellState extends State<AdFocusShell>
       ),
     );
 
-    if (result == SettingsScreenResult.changeAccount) {
+    if (result?.changeAccount == true) {
       await widget.onChangeAccount();
       return;
     }
 
     await _reloadSettingsAfterSettingsScreen();
-    await _reloadLocalDataAfterSettingsScreen();
+    await _reloadLocalDataAfterSettingsScreen(
+      skipServerRefresh: result?.didSyncNotion == true,
+    );
   }
 
   void _deleteQuest(QuestItem quest) {
@@ -1377,17 +1379,25 @@ class _AdFocusShellState extends State<AdFocusShell>
     }
   }
 
-  Future<void> _reloadLocalDataAfterSettingsScreen() async {
-    final data = await _buildLoadedLocalData();
+  Future<void> _reloadLocalDataAfterSettingsScreen({
+    bool skipServerRefresh = false,
+  }) async {
+    final data = await _buildLoadedLocalData(
+      skipServerRefresh: skipServerRefresh,
+    );
     if (!mounted) {
       return;
     }
     setState(() => _localData = data);
   }
 
-  Future<AppLocalData> _buildLoadedLocalData() async {
+  Future<AppLocalData> _buildLoadedLocalData({
+    bool skipServerRefresh = false,
+  }) async {
     var data = await _store.load();
-    data = await _loadServerInitialData(data);
+    if (!skipServerRefresh) {
+      data = await _loadServerInitialData(data);
+    }
 
     final activeSnapshot = await _questTimerService.currentState();
     if (activeSnapshot != null) {

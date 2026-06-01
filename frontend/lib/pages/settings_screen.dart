@@ -7,7 +7,18 @@ import 'package:start_on/storage/app_settings_store.dart';
 import 'package:start_on/storage/local_data_store.dart';
 import 'package:start_on/widgets/common.dart';
 
-enum SettingsScreenResult { changeAccount }
+class SettingsScreenResult {
+  const SettingsScreenResult._({
+    this.changeAccount = false,
+    this.didSyncNotion = false,
+  });
+
+  static const changeAccount = SettingsScreenResult._(changeAccount: true);
+  static const notionSynced = SettingsScreenResult._(didSyncNotion: true);
+
+  final bool changeAccount;
+  final bool didSyncNotion;
+}
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({
@@ -53,6 +64,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   String? _notionStatusErrorMessage;
   String _notionDatabaseId = '';
   String _notionDatabaseTitle = '';
+  bool _didSyncNotionThisSession = false;
 
   bool get _canInteractWithNotionControls =>
       !_isNotionSyncBusy &&
@@ -92,7 +104,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               Row(
                 children: [
                   IconButton(
-                    onPressed: () => Navigator.of(context).pop(),
+                    onPressed: _closeSettings,
                     icon: const Icon(Icons.arrow_back_ios_new_rounded),
                   ),
                   const SizedBox(width: 4),
@@ -539,6 +551,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         _notionDatabaseId = result.databaseId;
         _notionDatabaseTitle = result.databaseTitle;
         _notionStatusErrorMessage = null;
+        _didSyncNotionThisSession = true;
       });
       _showMessage(
         enableSync
@@ -626,6 +639,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   void _requestAccountChange() {
     Navigator.of(context).pop(SettingsScreenResult.changeAccount);
+  }
+
+  void _closeSettings() {
+    Navigator.of(context).pop(
+      _didSyncNotionThisSession ? SettingsScreenResult.notionSynced : null,
+    );
   }
 
   String get _notionSwitchSubtitle {
