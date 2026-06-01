@@ -7,6 +7,7 @@ class QuestItemResponse {
     required this.category,
     required this.elapsedSeconds,
     required this.defaultDurationSeconds,
+    this.dueAt,
   });
 
   factory QuestItemResponse.fromJson(Object? json) {
@@ -20,6 +21,7 @@ class QuestItemResponse {
       category: _readRequiredString(object, 'category'),
       elapsedSeconds: _readInt(object, 'elapsedSeconds'),
       defaultDurationSeconds: _readInt(object, 'defaultDurationSeconds'),
+      dueAt: _readOptionalDateTime(object, 'due_at'),
     );
   }
 
@@ -30,6 +32,7 @@ class QuestItemResponse {
   final String category;
   final int elapsedSeconds;
   final int defaultDurationSeconds;
+  final DateTime? dueAt;
 
   Map<String, dynamic> toJson() {
     return {
@@ -40,6 +43,7 @@ class QuestItemResponse {
       'category': category,
       'elapsedSeconds': elapsedSeconds,
       'defaultDurationSeconds': defaultDurationSeconds,
+      'due_at': dueAt?.toIso8601String(),
     };
   }
 }
@@ -51,6 +55,7 @@ class QuestCreateRequest {
     required this.difficulty,
     required this.category,
     required this.defaultDurationSeconds,
+    this.dueAt,
   });
 
   final String title;
@@ -58,6 +63,7 @@ class QuestCreateRequest {
   final String difficulty;
   final String category;
   final int defaultDurationSeconds;
+  final DateTime? dueAt;
 
   Map<String, dynamic> toJson() {
     return {
@@ -66,6 +72,7 @@ class QuestCreateRequest {
       'difficulty': difficulty,
       'category': category,
       'defaultDurationSeconds': defaultDurationSeconds,
+      'due_at': dueAt?.toIso8601String(),
     };
   }
 }
@@ -78,6 +85,7 @@ class QuestUpdateRequest {
     required this.category,
     required this.elapsedSeconds,
     required this.defaultDurationSeconds,
+    this.dueAt,
   });
 
   final String title;
@@ -86,6 +94,7 @@ class QuestUpdateRequest {
   final String category;
   final int elapsedSeconds;
   final int defaultDurationSeconds;
+  final DateTime? dueAt;
 
   Map<String, dynamic> toJson() {
     return {
@@ -95,6 +104,7 @@ class QuestUpdateRequest {
       'category': category,
       'elapsedSeconds': elapsedSeconds,
       'defaultDurationSeconds': defaultDurationSeconds,
+      'due_at': dueAt?.toIso8601String(),
     };
   }
 }
@@ -207,4 +217,23 @@ int _readInt(Map<String, dynamic> json, String key) {
     return value.toInt();
   }
   throw FormatException('$key must be a number.');
+}
+
+DateTime? _readOptionalDateTime(Map<String, dynamic> json, String key) {
+  final value = json[key];
+  if (value == null) {
+    return null;
+  }
+  if (value is! String) {
+    throw FormatException('$key must be an ISO date-time string or null.');
+  }
+  final trimmed = value.trim();
+  if (trimmed.isEmpty) {
+    return null;
+  }
+  final parsed = DateTime.tryParse(trimmed);
+  if (parsed == null) {
+    throw FormatException('$key must be an ISO date-time string or null.');
+  }
+  return parsed;
 }

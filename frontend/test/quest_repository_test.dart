@@ -33,12 +33,13 @@ void main() {
     final repository = QuestRepository(apiClient: apiClient);
 
     final created = await repository.createQuest(
-      const QuestCreateRequest(
+      QuestCreateRequest(
         title: ' Created quest ',
         exp: 50,
         difficulty: 'normal',
         category: 'work',
         defaultDurationSeconds: 2700,
+        dueAt: DateTime(2026, 6, 2),
       ),
     );
 
@@ -50,6 +51,7 @@ void main() {
       'difficulty': 'normal',
       'category': 'work',
       'defaultDurationSeconds': 2700,
+      'due_at': '2026-06-02T00:00:00.000',
     });
     expect(created.title, 'Created quest');
   });
@@ -66,13 +68,14 @@ void main() {
 
     final updated = await repository.updateQuest(
       'quest-1',
-      const QuestUpdateRequest(
+      QuestUpdateRequest(
         title: 'Updated quest',
         exp: 80,
         difficulty: 'hard',
         category: 'study',
         elapsedSeconds: 120,
         defaultDurationSeconds: 5400,
+        dueAt: DateTime(2026, 6, 3),
       ),
     );
 
@@ -85,6 +88,7 @@ void main() {
       'category': 'study',
       'elapsedSeconds': 120,
       'defaultDurationSeconds': 5400,
+      'due_at': '2026-06-03T00:00:00.000',
     });
     expect(updated.elapsedSeconds, 120);
   });
@@ -173,6 +177,7 @@ QuestItemResponse _quest({String title = 'Quest', int elapsedSeconds = 0}) {
     category: 'work',
     elapsedSeconds: elapsedSeconds,
     defaultDurationSeconds: 2700,
+    dueAt: null,
   );
 }
 

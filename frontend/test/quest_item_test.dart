@@ -12,6 +12,7 @@ void main() {
       category: 'study',
       elapsedSeconds: 120,
       defaultDurationSeconds: 2700,
+      dueAt: null,
     );
 
     final quest = QuestItem.fromApiResponse(response);
@@ -48,6 +49,7 @@ void main() {
       'difficulty': 'hard',
       'category': 'study',
       'defaultDurationSeconds': 5400,
+      'due_at': '2026-05-09T00:00:00.000',
     });
   });
 
@@ -60,6 +62,7 @@ void main() {
       category: 'life',
       elapsedSeconds: 600,
       defaultDurationSeconds: 1500,
+      dueDate: DateTime(2026, 5, 10),
     );
 
     final request = quest.toUpdateRequest();
@@ -71,7 +74,16 @@ void main() {
       'category': 'life',
       'elapsedSeconds': 600,
       'defaultDurationSeconds': 1500,
+      'due_at': '2026-05-10T00:00:00.000',
     });
+  });
+
+  test('normalizeQuestDueDate converts utc due dates before trimming time', () {
+    final normalized = normalizeQuestDueDate(
+      DateTime.parse('2026-06-02T00:00:00Z'),
+    );
+
+    expect(normalized, DateTime(2026, 6, 2));
   });
 
   test('fromJson accepts server difficulty names from cached data', () {

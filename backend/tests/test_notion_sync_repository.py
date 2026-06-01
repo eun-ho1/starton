@@ -226,6 +226,7 @@ def _make_notion_candidate(*, external_id: str | None) -> QuestCandidateResponse
         category=QuestCategory.WORK,
         exp=50,
         defaultDurationSeconds=2700,
+        due_at=None,
         reason="Generated from Notion sync.",
         external_source="notion",
         external_id=external_id,
@@ -267,6 +268,28 @@ class NotionParserTest(unittest.TestCase):
         self.assertEqual(
             quests[0].external_updated_at,
             datetime(2026, 5, 18, 1, 2, 3, tzinfo=timezone.utc),
+        )
+
+    def test_parse_notion_page_reads_due_date_property(self) -> None:
+        quest = parse_notion_page_to_quest(
+            {
+                "id": "page-123",
+                "properties": {
+                    "Name": {
+                        "type": "title",
+                        "title": [{"plain_text": "Prepare weekly report"}],
+                    },
+                    "Date": {
+                        "type": "date",
+                        "date": {"start": "2026-06-02"},
+                    },
+                },
+            }
+        )
+
+        self.assertEqual(
+            quest.due_at,
+            datetime(2026, 6, 2, 12, 0, tzinfo=timezone.utc),
         )
 
     def test_parse_notion_page_without_title_uses_safe_fallback(self) -> None:
@@ -393,6 +416,26 @@ class NotionQuestRepositoryTest(unittest.TestCase):
         self.assertEqual(summary_first.imported_count, 1)
         self.assertEqual(summary_second.updated_count, 1)
         self.assertEqual(summary_second.stale_count, 0)
+
+    def test_upsert_notion_quests_persists_due_at(self) -> None:
+        client = _FakeSupabaseClient()
+        repository = SupabaseQuestRepository(client)
+        due_at = datetime(2026, 6, 2, 12, 0, tzinfo=timezone.utc)
+
+        repository.upsert_notion_quests(
+            user_id="user-1",
+            profile_id="profile-1",
+            source_reference="data-source-1",
+            pages=[],
+            quests=[
+                _make_notion_candidate(external_id="page-1").model_copy(
+                    update={"due_at": due_at},
+                ),
+            ],
+        )
+
+        notion_row = client.table("quests").rows[0]
+        self.assertEqual(notion_row["due_at"], due_at.isoformat())
 
     def test_upsert_notion_quests_updates_legacy_client_quest_id_row(self) -> None:
         client = _FakeSupabaseClient()

@@ -29,6 +29,12 @@ class QuestItemResponse(BaseModel):
         ge=0,
         description="Expected default duration for the quest in seconds.",
     )
+    dueAt: datetime | None = Field(
+        default=None,
+        description="Optional due date/time for the quest.",
+        serialization_alias="due_at",
+        validation_alias="due_at",
+    )
 
 
 class QuestCreateRequest(BaseModel):
@@ -37,6 +43,12 @@ class QuestCreateRequest(BaseModel):
     difficulty: QuestDifficulty = Field(..., examples=["normal"])
     category: QuestCategory = Field(..., examples=["work"])
     defaultDurationSeconds: int = Field(..., ge=0, examples=[2700])
+    dueAt: datetime | None = Field(
+        default=None,
+        examples=["2026-06-02T09:00:00+09:00"],
+        serialization_alias="due_at",
+        validation_alias="due_at",
+    )
 
 
 class QuestUpdateRequest(BaseModel):
@@ -46,6 +58,12 @@ class QuestUpdateRequest(BaseModel):
     category: QuestCategory = Field(..., examples=["work"])
     elapsedSeconds: int = Field(..., ge=0, examples=[1800])
     defaultDurationSeconds: int = Field(..., ge=0, examples=[2700])
+    dueAt: datetime | None = Field(
+        default=None,
+        examples=["2026-06-02T09:00:00+09:00"],
+        serialization_alias="due_at",
+        validation_alias="due_at",
+    )
 
 
 class CompletedQuestRecordSchema(BaseModel):

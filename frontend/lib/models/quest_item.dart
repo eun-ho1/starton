@@ -163,6 +163,7 @@ class QuestItem {
       category: normalizeQuestCategory(response.category),
       elapsedSeconds: response.elapsedSeconds,
       defaultDurationSeconds: response.defaultDurationSeconds,
+      dueDate: normalizeQuestDueDate(response.dueAt),
       syncTarget: questSyncTargetQuest,
     );
   }
@@ -174,6 +175,7 @@ class QuestItem {
       difficulty: questDifficultyToApi(difficulty),
       category: normalizeQuestCategory(category),
       defaultDurationSeconds: defaultDurationSeconds,
+      dueAt: dueDate,
     );
   }
 
@@ -185,6 +187,7 @@ class QuestItem {
       category: normalizeQuestCategory(category),
       elapsedSeconds: elapsedSeconds,
       defaultDurationSeconds: defaultDurationSeconds,
+      dueAt: dueDate,
     );
   }
 }
@@ -353,7 +356,8 @@ DateTime? normalizeQuestDueDate(DateTime? value) {
     return null;
   }
 
-  return DateTime(value.year, value.month, value.day);
+  final normalized = value.isUtc ? value.toLocal() : value;
+  return DateTime(normalized.year, normalized.month, normalized.day);
 }
 
 String formatQuestDueDate(DateTime dueDate) {

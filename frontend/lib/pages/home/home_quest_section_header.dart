@@ -37,7 +37,7 @@ class HomeQuestSectionHeader extends StatelessWidget {
               children: [
                 const Flexible(
                   child: Text(
-                    '오늘의 퀘스트',
+                    '퀘스트 목록',
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(

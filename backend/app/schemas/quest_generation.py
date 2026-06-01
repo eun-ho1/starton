@@ -44,6 +44,7 @@ class QuestCandidateResponse(BaseModel):
     category: QuestCategory
     exp: int
     defaultDurationSeconds: int
+    due_at: datetime | None = None
     reason: str | None = None
     external_source: str | None = None
     external_id: str | None = None

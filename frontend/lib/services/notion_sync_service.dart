@@ -350,6 +350,7 @@ class _NotionQuestCandidate {
     required this.category,
     required this.exp,
     required this.defaultDurationSeconds,
+    this.dueAt,
     this.externalId,
   });
 
@@ -361,6 +362,9 @@ class _NotionQuestCandidate {
       category: _readRequiredString(object, 'category'),
       exp: _readInt(object, 'exp'),
       defaultDurationSeconds: _readInt(object, 'defaultDurationSeconds'),
+      dueAt: _readOptionalString(object, 'due_at') == null
+          ? null
+          : DateTime.parse(_readRequiredString(object, 'due_at')),
       externalId: _readOptionalString(object, 'external_id'),
     );
   }
@@ -370,6 +374,7 @@ class _NotionQuestCandidate {
   final String category;
   final int exp;
   final int defaultDurationSeconds;
+  final DateTime? dueAt;
   final String? externalId;
 
   QuestItem toQuestItem({required String databaseId, required int index}) {
@@ -385,6 +390,7 @@ class _NotionQuestCandidate {
       category: normalizeQuestCategory(category),
       elapsedSeconds: 0,
       defaultDurationSeconds: defaultDurationSeconds,
+      dueDate: normalizeQuestDueDate(dueAt),
     );
   }
 }

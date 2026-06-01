@@ -176,6 +176,7 @@ async def create_quest(
                 category=payload.category,
                 elapsedSeconds=0,
                 defaultDurationSeconds=payload.defaultDurationSeconds,
+                dueAt=payload.dueAt,
             ),
         )
     except QuestOperationError as error:
@@ -224,6 +225,7 @@ async def update_quest(
                 category=payload.category,
                 elapsedSeconds=payload.elapsedSeconds,
                 defaultDurationSeconds=payload.defaultDurationSeconds,
+                dueAt=payload.dueAt,
             ),
         )
     except QuestNotFoundError as error:

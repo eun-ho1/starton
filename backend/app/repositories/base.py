@@ -19,6 +19,7 @@ class QuestRecord:
     category: str
     elapsed_seconds: int
     default_duration_seconds: int
+    due_at: datetime | None = None
 
 
 @dataclass

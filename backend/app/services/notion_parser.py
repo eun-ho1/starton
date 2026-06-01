@@ -73,6 +73,18 @@ _EXP_PROPERTY_NAMES = (
     "points",
 )
 
+_DATE_PROPERTY_NAMES = (
+    "date",
+    "due",
+    "deadline",
+    "scheduled",
+    "schedule",
+    "start",
+    "startdate",
+    "duedate",
+    "calendar",
+)
+
 _PROPERTY_DEFAULT_MESSAGES = (
     "Defaulted missing status to active.",
     "Defaulted missing or unknown difficulty to normal.",
@@ -117,6 +129,7 @@ def parse_notion_page_to_quest(page: dict) -> QuestCandidateResponse:
     exp, used_default_exp = read_exp(properties, difficulty=difficulty)
     if used_default_exp:
         warnings.append("EXP property was missing or invalid.")
+    due_at = read_due_at(properties)
 
     default_duration_seconds = duration_from_difficulty(difficulty)
     if duration_minutes > 0:
@@ -142,6 +155,7 @@ def parse_notion_page_to_quest(page: dict) -> QuestCandidateResponse:
         category=category,
         exp=exp,
         defaultDurationSeconds=duration_seconds,
+        due_at=due_at,
         reason=build_reason(
             warnings,
             used_default_difficulty=used_default_difficulty,
@@ -300,6 +314,30 @@ def read_exp(
     return exp_from_difficulty(difficulty), True
 
 
+def read_due_at(properties: dict) -> datetime | None:
+    property_value = find_property(properties, _DATE_PROPERTY_NAMES)
+    if property_value is None:
+        property_value = _first_date_property(properties)
+    if property_value is None:
+        return None
+
+    property_type = property_value.get("type", "")
+    if property_type == "date":
+        return _parse_notion_date_value(property_value.get("date"))
+    if property_type == "formula":
+        formula = property_value.get("formula", {})
+        if isinstance(formula, dict) and formula.get("type") == "date":
+            return _parse_notion_date_value(formula.get("date"))
+    return None
+
+
+def _first_date_property(properties: dict) -> dict | None:
+    for raw_property in properties.values():
+        if isinstance(raw_property, dict) and raw_property.get("type") == "date":
+            return raw_property
+    return None
+
+
 def find_property(properties: dict, candidate_names: tuple[str, ...]) -> dict | None:
     normalized_candidates = {normalize_key(name) for name in candidate_names}
     for name, raw_property in properties.items():
@@ -355,6 +393,39 @@ def read_select_like_name(property_value: dict) -> str:
     property_type = property_value.get("type", "")
     nested = property_value.get(property_type, {})
     return nested.get("name", "") if isinstance(nested, dict) else ""
+
+
+def _parse_notion_date_value(raw_value: object) -> datetime | None:
+    if not isinstance(raw_value, dict):
+        return None
+
+    start = raw_value.get("start")
+    if not isinstance(start, str):
+        return None
+
+    normalized = start.strip()
+    if not normalized:
+        return None
+
+    # Notion all-day dates arrive as YYYY-MM-DD without timezone.
+    # Store them at noon UTC so common client timezones preserve the same date.
+    if "T" not in normalized:
+        try:
+            parsed = datetime.fromisoformat(normalized)
+        except ValueError:
+            return None
+        return datetime(parsed.year, parsed.month, parsed.day, 12, 0, tzinfo=UTC)
+
+    try:
+        if normalized.endswith("Z"):
+            normalized = normalized[:-1] + "+00:00"
+        parsed = datetime.fromisoformat(normalized)
+    except ValueError:
+        return None
+
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=UTC)
+    return parsed.astimezone(UTC)
 
 
 def parse_duration_minutes(raw_text: str) -> int:

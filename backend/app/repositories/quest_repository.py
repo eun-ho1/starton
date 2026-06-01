@@ -24,7 +24,7 @@ class SupabaseQuestRepository(QuestRepository):
             self._client.table("quests")
             .select(
                 "id, client_quest_id, source, title, exp, difficulty, category, "
-                "elapsed_seconds, default_duration_seconds",
+                "elapsed_seconds, default_duration_seconds, due_at",
             )
             .eq("user_id", user_id)
             .eq("status", "active")
@@ -50,6 +50,7 @@ class SupabaseQuestRepository(QuestRepository):
             "category": quest.category.value,
             "elapsed_seconds": quest.elapsedSeconds,
             "default_duration_seconds": quest.defaultDurationSeconds,
+            "due_at": _encode_datetime(quest.dueAt),
             "status": "active",
             "source": "manual",
         }
@@ -70,6 +71,7 @@ class SupabaseQuestRepository(QuestRepository):
             "category": quest.category.value,
             "elapsed_seconds": quest.elapsedSeconds,
             "default_duration_seconds": quest.defaultDurationSeconds,
+            "due_at": _encode_datetime(quest.dueAt),
         }
         existing = self.get_active_quest(user_id, quest_id)
         response = (
@@ -108,7 +110,7 @@ class SupabaseQuestRepository(QuestRepository):
             self._client.table("quests")
             .select(
                 "id, profile_id, title, exp, difficulty, category, "
-                "elapsed_seconds, default_duration_seconds",
+                "elapsed_seconds, default_duration_seconds, due_at",
             )
             .eq("user_id", user_id)
             .eq("id", quest_id)
@@ -170,6 +172,7 @@ class SupabaseQuestRepository(QuestRepository):
                 "category": quest.category.value,
                 "elapsed_seconds": 0,
                 "default_duration_seconds": quest.defaultDurationSeconds,
+                "due_at": _encode_datetime(quest.due_at),
                 "status": "active",
                 "source": "notion",
                 "source_reference": source_reference,
@@ -483,6 +486,7 @@ def _map_quest_row(row: dict[str, Any]) -> QuestItemResponse:
         category=row["category"],
         elapsedSeconds=row["elapsed_seconds"],
         defaultDurationSeconds=row["default_duration_seconds"],
+        dueAt=_coerce_datetime(row.get("due_at")),
     )
 
 
@@ -496,6 +500,7 @@ def _map_quest_record(row: dict[str, Any]) -> QuestRecord:
         category=row["category"],
         elapsed_seconds=row["elapsed_seconds"],
         default_duration_seconds=row["default_duration_seconds"],
+        due_at=_coerce_datetime(row.get("due_at")),
     )
 
 
