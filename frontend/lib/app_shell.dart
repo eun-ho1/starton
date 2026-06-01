@@ -315,10 +315,12 @@ class _AdFocusShellState extends State<AdFocusShell>
   bool _didShowLaunchQuestTimerSheet = false;
   bool _notificationsEnabled = true;
   bool _showQuestCelebration = false;
+  int _questAutoAdvanceRemainingSeconds = 0;
   AppLocalData _localData = AppLocalData.initial();
   List<DungeonStatusResponse> _serverDungeons = const [];
   LeaderboardResponse? _leaderboard;
   Timer? _questAutoAdvanceTimer;
+  String? _questAutoAdvanceQuestId;
   PersistentBottomSheetController? _questTimerBottomSheetController;
   StreamSubscription<QuestTimerSnapshot>? _questTimerTickSubscription;
   late final AnimationController _fabPopController = AnimationController(
@@ -494,6 +496,12 @@ class _AdFocusShellState extends State<AdFocusShell>
           if (_isSavingAiQuest) const _AiQuestSavingShimmerOverlay(),
           if (_isSavingCompletedQuest)
             const _QuestCompletionSavingShimmerOverlay(),
+          if (_questAutoAdvanceQuestId != null &&
+              _questAutoAdvanceRemainingSeconds > 0)
+            _QuestAutoAdvanceOverlay(
+              remainingSeconds: _questAutoAdvanceRemainingSeconds,
+              onCancel: _cancelQuestAutoAdvance,
+            ),
         ],
       ),
       floatingActionButtonLocation: const _BottomNavCenterFabLocation(),
@@ -885,7 +893,10 @@ class _AdFocusShellState extends State<AdFocusShell>
     return <String>[];
   }
 
-  Future<void> _openQuestTimer(QuestItem quest) async {
+  Future<void> _openQuestTimer(
+    QuestItem quest, {
+    bool autoStartOnOpen = false,
+  }) async {
     _cancelQuestAutoAdvance();
     _isOpeningQuestTimer = true;
     _isQuestTimerRouteOpen = true;
@@ -895,6 +906,7 @@ class _AdFocusShellState extends State<AdFocusShell>
           quest: quest,
           userLevel: _localData.level,
           notificationsEnabled: _notificationsEnabled,
+          autoStartOnOpen: autoStartOnOpen,
           onQuestChanged: (updatedQuest) =>
               _updateQuest(updatedQuest, syncServer: false),
           onAiSuggestionRequested: _handleQuestEditAiSuggestion,
@@ -1288,23 +1300,59 @@ class _AdFocusShellState extends State<AdFocusShell>
     }
 
     _showStyledSnackBar('15초 휴식 후 다음 퀘스트로 이동할게요.', centerText: true);
-    _questAutoAdvanceTimer = Timer(_questAutoAdvanceRestDuration, () {
+    setState(() {
+      _questAutoAdvanceQuestId = questId;
+      _questAutoAdvanceRemainingSeconds =
+          _questAutoAdvanceRestDuration.inSeconds;
+    });
+    _questAutoAdvanceTimer = Timer.periodic(const Duration(seconds: 1), (
+      timer,
+    ) {
       if (!mounted) {
+        timer.cancel();
         return;
       }
 
-      final nextQuest = _findQuest(questId);
-      if (nextQuest == null) {
+      if (_questAutoAdvanceRemainingSeconds <= 1) {
+        timer.cancel();
+        final nextQuest = _findQuest(questId);
+        setState(() {
+          _questAutoAdvanceTimer = null;
+          _questAutoAdvanceQuestId = null;
+          _questAutoAdvanceRemainingSeconds = 0;
+        });
+        if (nextQuest == null) {
+          return;
+        }
+
+        unawaited(_openQuestTimer(nextQuest, autoStartOnOpen: true));
         return;
       }
 
-      unawaited(_openQuestTimer(nextQuest));
+      setState(() {
+        _questAutoAdvanceRemainingSeconds -= 1;
+      });
     });
   }
 
   void _cancelQuestAutoAdvance() {
     _questAutoAdvanceTimer?.cancel();
     _questAutoAdvanceTimer = null;
+    if (!mounted) {
+      _questAutoAdvanceQuestId = null;
+      _questAutoAdvanceRemainingSeconds = 0;
+      return;
+    }
+
+    if (_questAutoAdvanceQuestId == null &&
+        _questAutoAdvanceRemainingSeconds == 0) {
+      return;
+    }
+
+    setState(() {
+      _questAutoAdvanceQuestId = null;
+      _questAutoAdvanceRemainingSeconds = 0;
+    });
   }
 
   void _listenToQuestTimerTicks() {
@@ -2016,6 +2064,108 @@ class _AdFocusShellState extends State<AdFocusShell>
       return;
     }
     setState(() => _showQuestCelebration = false);
+  }
+}
+
+class _QuestAutoAdvanceOverlay extends StatelessWidget {
+  const _QuestAutoAdvanceOverlay({
+    required this.remainingSeconds,
+    required this.onCancel,
+  });
+
+  final int remainingSeconds;
+  final VoidCallback onCancel;
+
+  @override
+  Widget build(BuildContext context) {
+    return Positioned.fill(
+      child: IgnorePointer(
+        ignoring: false,
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            color: Colors.black.withValues(alpha: 0.18),
+          ),
+          child: Center(
+            child: Container(
+              margin: const EdgeInsets.symmetric(horizontal: 24),
+              padding: const EdgeInsets.fromLTRB(24, 22, 24, 20),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF7F8FC),
+                borderRadius: BorderRadius.circular(28),
+                boxShadow: const [
+                  BoxShadow(
+                    color: Color(0x24000000),
+                    blurRadius: 28,
+                    offset: Offset(0, 18),
+                  ),
+                ],
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 68,
+                    height: 68,
+                    decoration: const BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: Color(0xFFE3E7FF),
+                    ),
+                    alignment: Alignment.center,
+                    child: Text(
+                      '$remainingSeconds',
+                      style: const TextStyle(
+                        color: Color(0xFF5C56E8),
+                        fontSize: 28,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 18),
+                  const Text(
+                    '다음 퀘스트 준비 중',
+                    style: TextStyle(
+                      color: Color(0xFF151A24),
+                      fontSize: 20,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  const Text(
+                    '15초 휴식이 끝나면 다음 퀘스트 타이머가 자동으로 시작돼요.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: Color(0xFF5B6374),
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      height: 1.45,
+                    ),
+                  ),
+                  const SizedBox(height: 18),
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton(
+                      onPressed: onCancel,
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: const Color(0xFF5C56E8),
+                        side: const BorderSide(color: Color(0xFFCACFFF)),
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(18),
+                        ),
+                      ),
+                      child: const Text(
+                        '자동 진행 취소',
+                        style: TextStyle(fontWeight: FontWeight.w800),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
   }
 }
 

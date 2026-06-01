@@ -21,6 +21,7 @@ class QuestTimerScreen extends StatefulWidget {
     required this.quest,
     required this.userLevel,
     required this.notificationsEnabled,
+    this.autoStartOnOpen = false,
     this.onQuestChanged,
     this.onAiSuggestionRequested,
   });
@@ -28,6 +29,7 @@ class QuestTimerScreen extends StatefulWidget {
   final QuestItem quest;
   final int userLevel;
   final bool notificationsEnabled;
+  final bool autoStartOnOpen;
   final ValueChanged<QuestItem>? onQuestChanged;
   final QuestAiSuggestionRequestHandler? onAiSuggestionRequested;
 
@@ -81,6 +83,14 @@ class _QuestTimerScreenState extends State<QuestTimerScreen> {
     );
     if (widget.notificationsEnabled) {
       _listenToBackgroundTimer();
+    }
+    if (widget.autoStartOnOpen) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted || _running || _hasStarted || _isCompleting) {
+          return;
+        }
+        _toggleTimer();
+      });
     }
   }
 
