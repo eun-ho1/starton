@@ -522,7 +522,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
       final currentData = await _localDataStore.load();
       await _localDataStore.save(
-        _localDataStore.removeNotionQuests(currentData),
+        _localDataStore.replaceNotionQuests(currentData, result.quests),
       );
 
       if (!mounted) {

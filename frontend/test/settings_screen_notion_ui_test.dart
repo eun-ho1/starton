@@ -88,7 +88,7 @@ void main() {
     await tester.pumpAndSettle();
   });
 
-  testWidgets('sync clears temporary local notion quests', (tester) async {
+  testWidgets('sync replaces local notion quests with synced results', (tester) async {
     final settingsStore = _FakeAppSettingsStore(_defaultSettings());
     final localDataStore = _FakeLocalDataStore(
       AppLocalData.initial().copyWith(
@@ -126,8 +126,10 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(localDataStore.current.quests.map((quest) => quest.id), [
+      'notion:page-1',
       'manual-1',
     ]);
+    expect(localDataStore.current.quests.first.title, 'Response Notion');
   });
 
   testWidgets('shows notion setup guidance copy', (tester) async {
