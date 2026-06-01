@@ -45,4 +45,7 @@ log "Installing Dart and Flutter dependencies"
 flutter pub get
 
 log "Building Flutter web app"
-flutter build web --release --dart-define=START_ON_API_BASE_URL="${API_BASE_URL}"
+if ! flutter build web --release --dart-define=START_ON_API_BASE_URL="${API_BASE_URL}"; then
+  log "Retrying Flutter web build with verbose output"
+  flutter build web --verbose --dart-define=START_ON_API_BASE_URL="${API_BASE_URL}"
+fi

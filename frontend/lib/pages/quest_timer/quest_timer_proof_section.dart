@@ -1,7 +1,6 @@
-import 'dart:io';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_neumorphic_plus/flutter_neumorphic.dart' as neu;
+import 'package:start_on/widgets/path_image_provider.dart';
 
 const double _compactProofSectionHeight = 141;
 
@@ -110,8 +109,8 @@ class QuestTimerProofSection extends StatelessWidget {
           padding: EdgeInsets.all(compact ? 6 : 8),
           child: ClipRRect(
             borderRadius: BorderRadius.circular(compact ? 7 : 8),
-            child: Image.file(
-              File(proofImagePath!),
+            child: Image(
+              image: imageProviderForPath(proofImagePath!),
               width: double.infinity,
               height: compact ? _compactProofSectionHeight - 12 : 180,
               fit: BoxFit.cover,

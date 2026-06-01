@@ -1,8 +1,7 @@
-import 'dart:io';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_neumorphic_plus/flutter_neumorphic.dart' as neu;
 import 'package:start_on/models/app_local_data.dart';
+import 'package:start_on/widgets/path_image_provider.dart';
 
 // 오늘 완료한 퀘스트의 결과와 보상을 보여주는 기록 카드입니다.
 class HomeCompletedQuestCard extends StatelessWidget {
@@ -86,8 +85,8 @@ class HomeCompletedQuestCard extends StatelessWidget {
               const SizedBox(width: 12),
               ClipRRect(
                 borderRadius: BorderRadius.circular(14),
-                child: Image.file(
-                  File(record.proofImagePath!),
+                child: Image(
+                  image: imageProviderForPath(record.proofImagePath!),
                   width: 52,
                   height: 52,
                   fit: BoxFit.cover,
