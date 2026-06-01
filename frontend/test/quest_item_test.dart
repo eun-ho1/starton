@@ -102,6 +102,21 @@ void main() {
     expect(quest.syncsWithQuestApi, isFalse);
   });
 
+  test('fromJson restores due date from due_at cached data', () {
+    final quest = QuestItem.fromJson({
+      'id': 'quest-2',
+      'title': 'calendar quest',
+      'exp': 40,
+      'difficulty': 'easy',
+      'category': 'life',
+      'elapsedSeconds': 0,
+      'defaultDurationSeconds': 1200,
+      'due_at': '2026-06-03T09:00:00+09:00',
+    });
+
+    expect(quest.dueDate, DateTime(2026, 6, 3));
+  });
+
   test('json preserves task sync target', () {
     final quest = QuestItem(
       id: 'task-1',

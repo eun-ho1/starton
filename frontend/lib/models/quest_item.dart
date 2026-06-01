@@ -131,7 +131,8 @@ class QuestItem {
 
   factory QuestItem.fromJson(Map<String, dynamic> json) {
     final difficulty = normalizeQuestDifficulty(json['difficulty'] as String?);
-    final rawDueDate = json['dueDate'] as String?;
+    final rawDueDate =
+        (json['dueDate'] as String?) ?? (json['due_at'] as String?);
     return QuestItem(
       id:
           json['id'] as String? ??
