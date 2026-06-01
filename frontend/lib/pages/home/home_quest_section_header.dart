@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:start_on/models/app_local_data.dart';
 
-// 오늘 진행할 퀘스트 목록 제목입니다.
 class HomeQuestSectionHeader extends StatelessWidget {
   const HomeQuestSectionHeader({
     super.key,
@@ -31,13 +30,13 @@ class HomeQuestSectionHeader extends StatelessWidget {
       children: [
         Expanded(
           child: Padding(
-            padding: const EdgeInsets.all(8.0),
+            padding: const EdgeInsets.all(8),
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
                 const Flexible(
                   child: Text(
-                    '퀘스트 목록',
+                    '오늘의 퀘스트',
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
@@ -72,10 +71,10 @@ class _CalendarHeaderButton extends StatelessWidget {
         label: '캘린더 열기',
         child: GestureDetector(
           onTap: onTap,
-          child: SizedBox(
+          child: const SizedBox(
             width: 31,
             height: 31,
-            child: const Icon(
+            child: Icon(
               Icons.calendar_today_rounded,
               size: 17,
               color: Color(0xFF1C2940),
@@ -101,14 +100,18 @@ class _HomeCalendarPage extends StatefulWidget {
 }
 
 class _HomeCalendarPageState extends State<_HomeCalendarPage> {
-  late DateTime _focusedMonth = _monthOnly(DateTime.now());
+  late DateTime _selectedDate = _dateOnly(DateTime.now());
+  late DateTime _focusedMonth = _monthOnly(_selectedDate);
 
   @override
   Widget build(BuildContext context) {
-    final now = DateTime.now();
-    final today = _dateOnly(now);
+    final today = _dateOnly(DateTime.now());
+    final selectedQuests = _questsForDate(widget.quests, _selectedDate);
     final todayQuests = _questsForDate(widget.quests, today);
-    final upcomingQuests = _upcomingQuests(widget.quests, today);
+    final upcomingQuests = _upcomingQuests(
+      widget.quests,
+      today,
+    ).where((quest) => !_isSameDay(quest.dueDate!, _selectedDate)).toList();
     final monthQuestCount = _questsInMonth(widget.quests, _focusedMonth).length;
     final monthCompletedCount = _completedInMonth(
       widget.completedRecords,
@@ -128,10 +131,12 @@ class _HomeCalendarPageState extends State<_HomeCalendarPage> {
             const SizedBox(height: 18),
             _MonthCalendarCard(
               focusedMonth: _focusedMonth,
+              selectedDate: _selectedDate,
               quests: widget.quests,
               completedRecords: widget.completedRecords,
               onPreviousMonth: () => _shiftMonth(-1),
               onNextMonth: () => _shiftMonth(1),
+              onDaySelected: _selectDay,
             ),
             const SizedBox(height: 16),
             Row(
@@ -166,9 +171,13 @@ class _HomeCalendarPageState extends State<_HomeCalendarPage> {
             ),
             const SizedBox(height: 18),
             _CalendarAgendaSection(
-              title: '오늘 예정',
-              emptyText: '오늘 예정된 퀘스트가 없어요.',
-              quests: todayQuests,
+              title: _isSameDay(_selectedDate, today)
+                  ? '오늘 일정'
+                  : '${formatQuestDueDate(_selectedDate)} 일정',
+              emptyText: _isSameDay(_selectedDate, today)
+                  ? '오늘 마감인 퀘스트가 없어요.'
+                  : '${formatQuestDueDate(_selectedDate)}에 마감인 퀘스트가 없어요.',
+              quests: selectedQuests,
             ),
             const SizedBox(height: 18),
             _CalendarAgendaSection(
@@ -188,6 +197,17 @@ class _HomeCalendarPageState extends State<_HomeCalendarPage> {
         _focusedMonth.year,
         _focusedMonth.month + offset,
       );
+      if (_selectedDate.year != _focusedMonth.year ||
+          _selectedDate.month != _focusedMonth.month) {
+        _selectedDate = DateTime(_focusedMonth.year, _focusedMonth.month, 1);
+      }
+    });
+  }
+
+  void _selectDay(DateTime day) {
+    setState(() {
+      _selectedDate = _dateOnly(day);
+      _focusedMonth = _monthOnly(day);
     });
   }
 
@@ -233,7 +253,7 @@ class _CalendarTopBar extends StatelessWidget {
         ),
         _RoundIconButton(
           icon: Icons.calendar_month_rounded,
-          tooltip: '캘린더 보드',
+          tooltip: '연간 보기',
           onTap: onOpenBoard,
         ),
       ],
@@ -531,17 +551,21 @@ class _RoundIconButton extends StatelessWidget {
 class _MonthCalendarCard extends StatelessWidget {
   const _MonthCalendarCard({
     required this.focusedMonth,
+    required this.selectedDate,
     required this.quests,
     required this.completedRecords,
     required this.onPreviousMonth,
     required this.onNextMonth,
+    required this.onDaySelected,
   });
 
   final DateTime focusedMonth;
+  final DateTime selectedDate;
   final List<QuestItem> quests;
   final List<CompletedQuestRecord> completedRecords;
   final VoidCallback onPreviousMonth;
   final VoidCallback onNextMonth;
+  final ValueChanged<DateTime> onDaySelected;
 
   @override
   Widget build(BuildContext context) {
@@ -620,8 +644,10 @@ class _MonthCalendarCard extends StatelessWidget {
                 day: day,
                 isInMonth: day.month == focusedMonth.month,
                 isToday: _isSameDay(day, DateTime.now()),
+                isSelected: _isSameDay(day, selectedDate),
                 quests: _questsForDate(quests, day),
                 completedCount: _completedForDate(completedRecords, day).length,
+                onTap: () => onDaySelected(day),
               );
             },
           ),
@@ -655,15 +681,19 @@ class _CalendarDayCell extends StatelessWidget {
     required this.day,
     required this.isInMonth,
     required this.isToday,
+    required this.isSelected,
     required this.quests,
     required this.completedCount,
+    required this.onTap,
   });
 
   final DateTime day;
   final bool isInMonth;
   final bool isToday;
+  final bool isSelected;
   final List<QuestItem> quests;
   final int completedCount;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
@@ -673,60 +703,77 @@ class _CalendarDayCell extends StatelessWidget {
       if (completedCount > 0) const Color(0xFF6F63FF),
     ];
 
-    return AnimatedContainer(
-      duration: const Duration(milliseconds: 180),
-      padding: const EdgeInsets.symmetric(vertical: 6),
-      decoration: BoxDecoration(
-        color: isInMonth ? const Color(0xFFF8FAFD) : Colors.transparent,
-        borderRadius: BorderRadius.circular(13),
-        border: Border.all(
-          color: isToday ? const Color(0xFFFF8B93) : Colors.transparent,
-          width: 1.4,
+    final borderColor = isSelected
+        ? const Color(0xFF1C2940)
+        : isToday
+        ? const Color(0xFFFF8B93)
+        : Colors.transparent;
+
+    final chipColor = isSelected
+        ? const Color(0xFF1C2940)
+        : isToday
+        ? const Color(0xFFFF8B93)
+        : Colors.transparent;
+
+    return GestureDetector(
+      onTap: onTap,
+      behavior: HitTestBehavior.opaque,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        padding: const EdgeInsets.symmetric(vertical: 6),
+        decoration: BoxDecoration(
+          color: isInMonth
+              ? (isSelected ? const Color(0xFFFFF1F2) : const Color(0xFFF8FAFD))
+              : Colors.transparent,
+          borderRadius: BorderRadius.circular(13),
+          border: Border.all(color: borderColor, width: 1.4),
         ),
-      ),
-      child: Opacity(
-        opacity: isInMonth ? 1 : 0.34,
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Container(
-              width: 24,
-              height: 24,
-              alignment: Alignment.center,
-              decoration: BoxDecoration(
-                color: isToday ? const Color(0xFFFF8B93) : Colors.transparent,
-                shape: BoxShape.circle,
-              ),
-              child: Text(
-                '${day.day}',
-                style: TextStyle(
-                  color: isToday ? Colors.white : const Color(0xFF1C2940),
-                  fontSize: 12,
-                  fontWeight: FontWeight.w900,
+        child: Opacity(
+          opacity: isInMonth ? 1 : 0.34,
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Container(
+                width: 24,
+                height: 24,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: chipColor,
+                  shape: BoxShape.circle,
+                ),
+                child: Text(
+                  '${day.day}',
+                  style: TextStyle(
+                    color: isSelected || isToday
+                        ? Colors.white
+                        : const Color(0xFF1C2940),
+                    fontSize: 12,
+                    fontWeight: FontWeight.w900,
+                  ),
                 ),
               ),
-            ),
-            const SizedBox(height: 5),
-            SizedBox(
-              height: 5,
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  for (final color in dotColors.take(3)) ...[
-                    Container(
-                      width: 5,
-                      height: 5,
-                      decoration: BoxDecoration(
-                        color: color,
-                        shape: BoxShape.circle,
+              const SizedBox(height: 5),
+              SizedBox(
+                height: 5,
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    for (final color in dotColors.take(3)) ...[
+                      Container(
+                        width: 5,
+                        height: 5,
+                        decoration: BoxDecoration(
+                          color: color,
+                          shape: BoxShape.circle,
+                        ),
                       ),
-                    ),
-                    const SizedBox(width: 2),
+                      const SizedBox(width: 2),
+                    ],
                   ],
-                ],
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -969,7 +1016,7 @@ List<QuestItem> _questsForDate(List<QuestItem> quests, DateTime day) {
   return quests.where((quest) {
     final dueDate = normalizeQuestDueDate(quest.dueDate);
     return dueDate != null && _isSameDay(dueDate, target);
-  }).toList();
+  }).toList()..sort((left, right) => left.title.compareTo(right.title));
 }
 
 List<CompletedQuestRecord> _completedForDate(
