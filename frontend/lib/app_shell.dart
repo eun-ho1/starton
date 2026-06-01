@@ -41,6 +41,7 @@ const _systemUiOverlayStyle = SystemUiOverlayStyle(
   statusBarColor: Colors.transparent,
   statusBarIconBrightness: Brightness.dark,
 );
+const Duration _questAutoAdvanceRestDuration = Duration(seconds: 15);
 
 class AdFocusApp extends StatelessWidget {
   const AdFocusApp({
@@ -317,6 +318,7 @@ class _AdFocusShellState extends State<AdFocusShell>
   AppLocalData _localData = AppLocalData.initial();
   List<DungeonStatusResponse> _serverDungeons = const [];
   LeaderboardResponse? _leaderboard;
+  Timer? _questAutoAdvanceTimer;
   PersistentBottomSheetController? _questTimerBottomSheetController;
   StreamSubscription<QuestTimerSnapshot>? _questTimerTickSubscription;
   late final AnimationController _fabPopController = AnimationController(
@@ -387,6 +389,7 @@ class _AdFocusShellState extends State<AdFocusShell>
   @override
   void dispose() {
     _lifecycleObserver.dispose();
+    _questAutoAdvanceTimer?.cancel();
     _questTimerTickSubscription?.cancel();
     _fabPopController.dispose();
     if (_ownsProfileRepository) {
@@ -518,10 +521,7 @@ class _AdFocusShellState extends State<AdFocusShell>
       ),
       bottomNavigationBar: AbsorbPointer(
         absorbing: isAiQuestBusy,
-        child: AppBottomNavBar(
-          currentIndex: _currentIndex,
-          onTap: (index) => setState(() => _currentIndex = index),
-        ),
+        child: AppBottomNavBar(currentIndex: _currentIndex, onTap: _changeTab),
       ),
     );
   }
@@ -531,6 +531,7 @@ class _AdFocusShellState extends State<AdFocusShell>
   }
 
   void _changeTab(int index) {
+    _cancelQuestAutoAdvance();
     setState(() => _currentIndex = index);
   }
 
@@ -550,6 +551,7 @@ class _AdFocusShellState extends State<AdFocusShell>
   }
 
   Future<void> _openAddQuestScreen({String? initialCategory}) async {
+    _cancelQuestAutoAdvance();
     final quest = await Navigator.of(context).push<QuestItem>(
       MaterialPageRoute<QuestItem>(
         builder: (context) => AddQuestScreen(initialCategory: initialCategory),
@@ -884,6 +886,7 @@ class _AdFocusShellState extends State<AdFocusShell>
   }
 
   Future<void> _openQuestTimer(QuestItem quest) async {
+    _cancelQuestAutoAdvance();
     _isOpeningQuestTimer = true;
     _isQuestTimerRouteOpen = true;
     final result = await Navigator.of(context).push<Object?>(
@@ -919,6 +922,7 @@ class _AdFocusShellState extends State<AdFocusShell>
     }
 
     if (result case CompletedQuestRecord completedRecord) {
+      final nextQuest = _nextQuestAfter(completedRecord.questId);
       final savedRecord = await _completeQuest(completedRecord);
       if (!mounted || savedRecord == null) {
         return;
@@ -927,6 +931,7 @@ class _AdFocusShellState extends State<AdFocusShell>
       _setLocalData(_store.completeQuest(_localData, savedRecord));
       unawaited(_refreshServerProgressData());
       _triggerQuestCelebration();
+      _scheduleQuestAutoAdvance(nextQuest?.id);
       return;
     }
 
@@ -944,6 +949,7 @@ class _AdFocusShellState extends State<AdFocusShell>
   }
 
   Future<void> _openSettings() async {
+    _cancelQuestAutoAdvance();
     final result = await Navigator.of(context).push<SettingsScreenResult>(
       MaterialPageRoute<SettingsScreenResult>(
         builder: (_) => SettingsScreen(
@@ -1099,6 +1105,7 @@ class _AdFocusShellState extends State<AdFocusShell>
   }
 
   Future<void> _openQuestTimerBottomSheet(QuestItem quest) async {
+    _cancelQuestAutoAdvance();
     if (!mounted ||
         _isOpeningQuestTimer ||
         _isQuestTimerRouteOpen ||
@@ -1256,6 +1263,48 @@ class _AdFocusShellState extends State<AdFocusShell>
           reverseDuration: Duration(milliseconds: 320),
         ),
       );
+  }
+
+  QuestItem? _nextQuestAfter(String questId) {
+    final currentIndex = _localData.quests.indexWhere(
+      (quest) => quest.id == questId,
+    );
+    if (currentIndex == -1) {
+      return null;
+    }
+
+    final nextIndex = currentIndex + 1;
+    if (nextIndex >= _localData.quests.length) {
+      return null;
+    }
+
+    return _localData.quests[nextIndex];
+  }
+
+  void _scheduleQuestAutoAdvance(String? questId) {
+    _cancelQuestAutoAdvance();
+    if (questId == null) {
+      return;
+    }
+
+    _showStyledSnackBar('15초 휴식 후 다음 퀘스트로 이동할게요.', centerText: true);
+    _questAutoAdvanceTimer = Timer(_questAutoAdvanceRestDuration, () {
+      if (!mounted) {
+        return;
+      }
+
+      final nextQuest = _findQuest(questId);
+      if (nextQuest == null) {
+        return;
+      }
+
+      unawaited(_openQuestTimer(nextQuest));
+    });
+  }
+
+  void _cancelQuestAutoAdvance() {
+    _questAutoAdvanceTimer?.cancel();
+    _questAutoAdvanceTimer = null;
   }
 
   void _listenToQuestTimerTicks() {
