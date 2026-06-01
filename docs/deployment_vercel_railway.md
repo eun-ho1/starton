@@ -70,6 +70,7 @@ START_ON_API_BASE_URL=https://your-railway-domain/api/v1
 ```
 
 This value is compiled into the Flutter web bundle through `--dart-define`.
+If this variable is missing, `vercel-build.sh` now fails early with a clear message.
 
 ### 4. Redeploy after backend URL changes
 
@@ -83,3 +84,4 @@ If the Railway public URL changes, update `START_ON_API_BASE_URL` in Vercel and 
 - Vercel `START_ON_API_BASE_URL` points to the Railway `/api/v1` base
 - Vercel build output is `build/web`
 - After production deploy, sign-in and one API-backed screen both succeed from the browser
+- If a deploy starts failing after upgrading Flutter locally, clear the Vercel build cache or redeploy. The build script now refreshes the cached Flutter checkout automatically.
