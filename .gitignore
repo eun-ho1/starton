@@ -8,6 +8,7 @@
 *.err.log
 
 # Frontend local output
+/build/
 /frontend/.dart_tool/
 /frontend/.flutter-plugins-dependencies
 /frontend/.pub-cache/

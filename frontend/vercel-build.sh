@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "${SCRIPT_DIR}"
+
 FLUTTER_ROOT="${HOME}/flutter"
 FLUTTER_VERSION="${FLUTTER_VERSION:-stable}"
 API_BASE_URL="${START_ON_API_BASE_URL:?START_ON_API_BASE_URL must be set}"

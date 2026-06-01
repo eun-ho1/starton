@@ -50,6 +50,7 @@ After deployment, verify:
 - Import the same repository into Vercel.
 - Set the project root directory to `frontend`.
 - Set Framework Preset to `Other`.
+- If you keep the Vercel project root at the repository root by mistake, the repository-level `vercel-build.sh` now forwards to `frontend/` and copies the final site back to `build/web`.
 
 ### 2. Configure build settings
 
@@ -58,6 +59,7 @@ Use these settings:
 - Build Command: `bash ./vercel-build.sh`
 - Output Directory: `build/web`
 - Install Command: leave empty
+- Preferred: keep Root Directory as `frontend`, so these paths stay local to the Flutter app.
 
 ### 3. Configure environment variables
 
