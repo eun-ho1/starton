@@ -5,8 +5,6 @@ from pathlib import Path
 from typing import Any
 from uuid import UUID
 
-from google import genai
-from google.genai import types
 from pydantic import BaseModel
 
 from app.core.config import settings
@@ -43,7 +41,7 @@ class GeminiProvider:
         if not settings.gemini_api_key:
             raise RuntimeError("GEMINI_API_KEY is required to use GeminiProvider.")
 
-        self._client = genai.Client(api_key=settings.gemini_api_key)
+        self._client = _build_genai_client(api_key=settings.gemini_api_key)
         self._prompt_path = prompt_path or _PROMPT_PATH
         self._model_name = model_name
 
@@ -88,7 +86,7 @@ class GeminiProvider:
         response = self._client.models.generate_content(
             model=self._model_name,
             contents=rendered_prompt,
-            config=types.GenerateContentConfig(
+            config=_build_generate_content_config(
                 response_mime_type="application/json",
                 response_json_schema=MediatorOutput.model_json_schema(mode="validation"),
                 system_instruction=_SYSTEM_INSTRUCTION,
@@ -165,3 +163,25 @@ class GeminiProvider:
         if isinstance(value, UUID):
             return str(value)
         return str(value)
+
+
+def _build_genai_client(*, api_key: str) -> Any:
+    try:
+        from google import genai
+    except ModuleNotFoundError as error:
+        raise RuntimeError(
+            "google-genai is required to use GeminiProvider."
+        ) from error
+
+    return genai.Client(api_key=api_key)
+
+
+def _build_generate_content_config(**kwargs: Any) -> Any:
+    try:
+        from google.genai import types
+    except ModuleNotFoundError as error:
+        raise RuntimeError(
+            "google-genai is required to use GeminiProvider."
+        ) from error
+
+    return types.GenerateContentConfig(**kwargs)

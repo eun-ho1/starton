@@ -191,6 +191,25 @@ class TaskIntakeRouteTest(unittest.TestCase):
         self.assertEqual(detail["code"], "task_intake_failed")
         self.assertEqual(detail["message"], "Task intake failed unexpectedly.")
 
+    def test_create_task_intake_maps_rate_limit_error_to_429(self) -> None:
+        service = FakeIntakeService(
+            error=RuntimeError("429 RESOURCE_EXHAUSTED: too many requests")
+        )
+        client = self.make_client(service)
+
+        response = client.post(
+            "/api/v1/task-intake",
+            json={"text": "과제 준비"},
+        )
+
+        self.assertEqual(response.status_code, 429)
+        detail = response.json()["detail"]
+        self.assertEqual(detail["code"], "ai_rate_limited")
+        self.assertEqual(
+            detail["message"],
+            "AI provider rate limit exceeded. Please retry later.",
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -127,7 +127,14 @@ class ApiClient {
 
     final decodedBody = _decodeResponseBody(response);
     if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw ApiClientException.fromResponse(response, decodedBody);
+      final exception = ApiClientException.fromResponse(
+        response,
+        decodedBody,
+        requestUri: uri,
+        method: method.toUpperCase(),
+      );
+      _logHttpError(exception, requestBody: body);
+      throw exception;
     }
 
     return decodedBody;
@@ -302,7 +309,9 @@ class ApiClient {
 
     final currentSession = await authSessionStore.load();
     final refreshToken = currentSession?.refreshToken?.trim();
-    if (currentSession == null || refreshToken == null || refreshToken.isEmpty) {
+    if (currentSession == null ||
+        refreshToken == null ||
+        refreshToken.isEmpty) {
       await authSessionStore.clear();
       return false;
     }
@@ -386,6 +395,24 @@ class ApiClient {
 
   void close() => _httpClient.close();
 
+  void _logHttpError(ApiClientException error, {Object? requestBody}) {
+    final buffer = StringBuffer('[ApiClient] HTTP error')
+      ..write('\n  method: ${error.method ?? 'unknown'}')
+      ..write('\n  uri: ${error.requestUri ?? 'unknown'}')
+      ..write('\n  status: ${error.statusCode}')
+      ..write('\n  code: ${error.code}')
+      ..write('\n  message: ${error.message}');
+
+    if (requestBody != null) {
+      buffer.write('\n  requestBody: $requestBody');
+    }
+    if (error.responseBody != null) {
+      buffer.write('\n  responseBody: ${error.responseBody}');
+    }
+
+    debugPrint(buffer.toString());
+  }
+
   static String _normalizeBaseUrl(String value) {
     final trimmed = value.trim();
     if (trimmed.isEmpty) {
@@ -406,14 +433,18 @@ class ApiClientException implements Exception {
     required this.statusCode,
     required this.code,
     required this.message,
+    this.requestUri,
+    this.method,
     this.responseBody,
     this.cause,
   });
 
   factory ApiClientException.fromResponse(
     http.Response response,
-    dynamic responseBody,
-  ) {
+    dynamic responseBody, {
+    Uri? requestUri,
+    String? method,
+  }) {
     String code = 'http_${response.statusCode}';
     String message = 'Request failed with status ${response.statusCode}.';
 
@@ -439,6 +470,8 @@ class ApiClientException implements Exception {
       statusCode: response.statusCode,
       code: code,
       message: message,
+      requestUri: requestUri,
+      method: method,
       responseBody: responseBody,
     );
   }
@@ -446,9 +479,21 @@ class ApiClientException implements Exception {
   final int statusCode;
   final String code;
   final String message;
+  final Uri? requestUri;
+  final String? method;
   final dynamic responseBody;
   final Object? cause;
 
   @override
-  String toString() => 'ApiClientException($statusCode, $code): $message';
+  String toString() {
+    final requestSummary = [
+      if (method != null) method,
+      if (requestUri != null) requestUri.toString(),
+    ].join(' ');
+    final suffix = responseBody == null ? '' : ' responseBody=$responseBody';
+    if (requestSummary.isEmpty) {
+      return 'ApiClientException($statusCode, $code): $message$suffix';
+    }
+    return 'ApiClientException($statusCode, $code, $requestSummary): $message$suffix';
+  }
 }

@@ -37,6 +37,14 @@ async def create_task_intake(
             ).model_dump(),
         ) from error
     except Exception as error:
+        if _is_rate_limited_error(error):
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                detail=ErrorDetail(
+                    code="ai_rate_limited",
+                    message="AI provider rate limit exceeded. Please retry later.",
+                ).model_dump(),
+            ) from error
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=ErrorDetail(
@@ -46,3 +54,21 @@ async def create_task_intake(
         ) from error
 
     return TaskIntakeApiResponse(success=True, data=result, error=None)
+
+
+def _is_rate_limited_error(error: Exception) -> bool:
+    message = str(error).lower().strip()
+    if not message:
+        return False
+
+    return any(
+        token in message
+        for token in (
+            "too many requests",
+            "rate limit",
+            "rate_limit",
+            "resource_exhausted",
+            "quota exceeded",
+            "429",
+        )
+    )

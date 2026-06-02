@@ -2038,6 +2038,7 @@ class _AdFocusShellState extends State<AdFocusShell>
     if (!mounted) {
       return;
     }
+    _logQuestSyncError(fallbackMessage, error);
     _showStyledSnackBar(_questSyncErrorMessage(fallbackMessage, error));
   }
 
@@ -2045,10 +2046,35 @@ class _AdFocusShellState extends State<AdFocusShell>
     if (error is ApiClientException && error.statusCode == 401) {
       return '로그인이 만료됐어요. 다시 로그인해 주세요.';
     }
+    if (error is ApiClientException && error.statusCode == 429) {
+      return 'AI 요청 한도에 도달했어요. 잠시 후 다시 시도해 주세요.';
+    }
     if (error is QuestRepositoryException && error.code == 'quest_not_found') {
       return '서버에서 퀘스트를 찾지 못했어요.';
     }
     return fallbackMessage;
+  }
+
+  void _logQuestSyncError(String fallbackMessage, Object error) {
+    final buffer = StringBuffer('[QuestSyncError] $fallbackMessage')
+      ..write('\n  type: ${error.runtimeType}');
+
+    if (error is ApiClientException) {
+      buffer
+        ..write('\n  status: ${error.statusCode}')
+        ..write('\n  code: ${error.code}')
+        ..write('\n  message: ${error.message}');
+      if (error.requestUri != null) {
+        buffer.write('\n  uri: ${error.requestUri}');
+      }
+      if (error.responseBody != null) {
+        buffer.write('\n  responseBody: ${error.responseBody}');
+      }
+    } else {
+      buffer.write('\n  error: $error');
+    }
+
+    debugPrint(buffer.toString());
   }
 
   void _triggerQuestCelebration() {
