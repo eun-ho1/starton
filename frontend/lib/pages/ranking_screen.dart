@@ -4,11 +4,7 @@ import 'package:start_on/models/leaderboard_api_models.dart';
 import 'package:start_on/widgets/common.dart';
 
 class RankingScreen extends StatelessWidget {
-  const RankingScreen({
-    super.key,
-    required this.data,
-    this.leaderboard,
-  });
+  const RankingScreen({super.key, required this.data, this.leaderboard});
 
   final AppLocalData data;
   final LeaderboardResponse? leaderboard;
@@ -21,15 +17,21 @@ class RankingScreen extends StatelessWidget {
       localScore,
       leaderboard: leaderboard,
     );
-    final currentEntryIndex = entries.indexWhere((entry) => entry.isCurrentUser);
-    final currentEntry = currentEntryIndex >= 0 ? entries[currentEntryIndex] : null;
+    final currentEntryIndex = entries.indexWhere(
+      (entry) => entry.isCurrentUser,
+    );
+    final currentEntry = currentEntryIndex >= 0
+        ? entries[currentEntryIndex]
+        : null;
     final score = currentEntry?.score ?? localScore;
     final currentRank =
         currentEntry?.rank ??
         leaderboard?.currentUserRank ??
         currentEntryIndex + 1;
     final safeRank = currentRank <= 0 ? entries.length : currentRank;
-    final nextEntry = currentEntryIndex > 0 ? entries[currentEntryIndex - 1] : null;
+    final nextEntry = currentEntryIndex > 0
+        ? entries[currentEntryIndex - 1]
+        : null;
     final nextScore = nextEntry?.score;
     final pointsToNext = nextScore == null
         ? 0
@@ -67,10 +69,7 @@ class RankingScreen extends StatelessWidget {
           ],
         ),
         const SizedBox(height: 22),
-        const SectionHeading(
-          icon: Icons.emoji_events_outlined,
-          title: '주간 랭킹',
-        ),
+        const SectionHeading(icon: Icons.emoji_events_outlined, title: '주간 랭킹'),
         const SizedBox(height: 14),
         for (var index = 0; index < entries.length; index++) ...[
           _RankingRow(entry: entries[index]),
@@ -81,7 +80,7 @@ class RankingScreen extends StatelessWidget {
   }
 }
 
-class _RankingHeroCard extends StatelessWidget {
+class _RankingHeroCard extends StatefulWidget {
   const _RankingHeroCard({
     required this.rank,
     required this.totalCount,
@@ -95,20 +94,52 @@ class _RankingHeroCard extends StatelessWidget {
   final int pointsToNext;
 
   @override
+  State<_RankingHeroCard> createState() => _RankingHeroCardState();
+}
+
+class _RankingHeroCardState extends State<_RankingHeroCard>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _gradientController;
+
+  @override
+  void initState() {
+    super.initState();
+    _gradientController = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 8),
+    )..repeat();
+  }
+
+  @override
+  void dispose() {
+    _gradientController.dispose();
+    super.dispose();
+  }
+
+  double _lightOpacity(double cycle, double start) {
+    final phase = (cycle - start) % 1.0;
+    if (phase < 0.16) {
+      return Curves.easeOutCubic.transform(phase / 0.16);
+    }
+    if (phase < 0.36) {
+      return 1.0;
+    }
+    if (phase < 0.58) {
+      return 1.0 - Curves.easeInCubic.transform((phase - 0.36) / 0.22);
+    }
+    return 0.0;
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final progress = totalCount <= 1
+    final progress = widget.totalCount <= 1
         ? 1.0
-        : (totalCount - rank + 1) / totalCount;
+        : (widget.totalCount - widget.rank + 1) / widget.totalCount;
+    const borderRadius = BorderRadius.all(Radius.circular(24));
 
     return Container(
-      padding: const EdgeInsets.all(22),
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(24),
-        gradient: const LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [Color(0xFF6F63FF), Color(0xFFFF7F88), Color(0xFFFFC85B)],
-        ),
+        borderRadius: borderRadius,
         boxShadow: [
           BoxShadow(
             color: const Color(0xFF6F63FF).withValues(alpha: 0.2),
@@ -117,75 +148,141 @@ class _RankingHeroCard extends StatelessWidget {
           ),
         ],
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                width: 48,
-                height: 48,
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.2),
-                  borderRadius: BorderRadius.circular(16),
+      child: ClipRRect(
+        borderRadius: borderRadius,
+        child: AnimatedBuilder(
+          animation: _gradientController,
+          child: Padding(
+            padding: const EdgeInsets.all(22),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      width: 48,
+                      height: 48,
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.2),
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      child: const Icon(
+                        Icons.workspace_premium_rounded,
+                        color: Colors.white,
+                        size: 28,
+                      ),
+                    ),
+                    const Spacer(),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 8,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.18),
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      child: Text(
+                        "${widget.score} pt",
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w800,
+                          fontSize: 16,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
-                child: const Icon(
-                  Icons.workspace_premium_rounded,
-                  color: Colors.white,
-                  size: 28,
-                ),
-              ),
-              const Spacer(),
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 8,
-                ),
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.18),
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                child: Text(
-                  '$score pt',
+                const SizedBox(height: 24),
+                Text(
+                  "#${widget.rank}",
                   style: const TextStyle(
                     color: Colors.white,
-                    fontWeight: FontWeight.w800,
-                    fontSize: 16,
+                    fontSize: 42,
+                    fontWeight: FontWeight.w900,
+                    height: 1,
                   ),
                 ),
+                const SizedBox(height: 8),
+                Text(
+                  widget.pointsToNext == 0
+                      ? "현재 1위입니다"
+                      : "다음 순위까지 ${widget.pointsToNext}점 남았어요",
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 18),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(999),
+                  child: LinearProgressIndicator(
+                    value: progress.clamp(0.0, 1.0),
+                    minHeight: 8,
+                    backgroundColor: Colors.white.withValues(alpha: 0.28),
+                    valueColor: const AlwaysStoppedAnimation<Color>(
+                      Colors.white,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          builder: (context, child) {
+            final cycle = _gradientController.value;
+            final topLeftOpacity = _lightOpacity(cycle, 0.92);
+            final bottomRightOpacity = _lightOpacity(cycle, 0.42);
+
+            return DecoratedBox(
+              decoration: const BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [
+                    Color(0xFF5B4BE8),
+                    Color(0xFF6F63FF),
+                    Color(0xFF4F8DF7),
+                  ],
+                  stops: [0.0, 0.5, 1.0],
+                ),
               ),
-            ],
-          ),
-          const SizedBox(height: 24),
-          Text(
-            '#$rank',
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 42,
-              fontWeight: FontWeight.w900,
-              height: 1,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            pointsToNext == 0 ? '현재 1위입니다' : '다음 순위까지 $pointsToNext점 남았어요',
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 15,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-          const SizedBox(height: 18),
-          ClipRRect(
-            borderRadius: BorderRadius.circular(999),
-            child: LinearProgressIndicator(
-              value: progress.clamp(0.0, 1.0),
-              minHeight: 8,
-              backgroundColor: Colors.white.withValues(alpha: 0.28),
-              valueColor: const AlwaysStoppedAnimation<Color>(Colors.white),
-            ),
-          ),
-        ],
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  gradient: RadialGradient(
+                    center: const Alignment(-0.78, -0.82),
+                    radius: 0.92,
+                    colors: [
+                      Colors.white.withValues(alpha: 0.58 * topLeftOpacity),
+                      Colors.white.withValues(alpha: 0.24 * topLeftOpacity),
+                      Colors.white.withValues(alpha: 0),
+                    ],
+                    stops: const [0.0, 0.38, 1.0],
+                  ),
+                ),
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    gradient: RadialGradient(
+                      center: const Alignment(0.78, 0.82),
+                      radius: 0.92,
+                      colors: [
+                        Colors.white.withValues(
+                          alpha: 0.58 * bottomRightOpacity,
+                        ),
+                        Colors.white.withValues(
+                          alpha: 0.24 * bottomRightOpacity,
+                        ),
+                        Colors.white.withValues(alpha: 0),
+                      ],
+                      stops: const [0.0, 0.38, 1.0],
+                    ),
+                  ),
+                  child: child,
+                ),
+              ),
+            );
+          },
+        ),
       ),
     );
   }
@@ -363,14 +460,16 @@ List<_RankingEntry> _leaderboardEntries(
   int score, {
   LeaderboardResponse? leaderboard,
 }) {
-  final serverEntries = leaderboard?.entries ?? const <LeaderboardEntryResponse>[];
+  final serverEntries =
+      leaderboard?.entries ?? const <LeaderboardEntryResponse>[];
   if (serverEntries.isNotEmpty) {
     return serverEntries
         .map(
           (entry) => _RankingEntry(
             rank: entry.rank,
             name: entry.userName,
-            subtitle: 'Lv.${entry.level} · 이번 주 ${entry.weeklyCompletedCount}개 완료',
+            subtitle:
+                'Lv.${entry.level} · 이번 주 ${entry.weeklyCompletedCount}개 완료',
             score: entry.score,
             color: entry.isCurrentUser
                 ? const Color(0xFFFFB84D)
