@@ -6,14 +6,12 @@ class QuestTimerSummary extends StatelessWidget {
   const QuestTimerSummary({
     super.key,
     required this.quest,
-    required this.userLevel,
     required this.earnedExp,
     required this.maxDurationSeconds,
     this.onSubtaskSelect,
   });
 
   final QuestItem quest;
-  final int userLevel;
   final int earnedExp;
   final int maxDurationSeconds;
   final ValueChanged<String>? onSubtaskSelect;
@@ -22,6 +20,7 @@ class QuestTimerSummary extends StatelessWidget {
   Widget build(BuildContext context) {
     final categoryStyle = questCategoryStyleFor(quest.category);
     final dueDate = quest.dueDate;
+    final questLevel = _questDifficultyLevel(quest.difficulty);
 
     return SizedBox(
       key: const Key('quest_timer.title_box'),
@@ -67,7 +66,7 @@ class QuestTimerSummary extends StatelessWidget {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Text(
-                      'Lv.$userLevel',
+                      'Lv.$questLevel',
                       style: const TextStyle(
                         fontSize: 15,
                         fontWeight: FontWeight.w900,
@@ -322,6 +321,14 @@ String _questSubtaskEnergyLabel(String energy) {
     'low' => '낮은 에너지',
     'high' => '높은 에너지',
     _ => '보통 에너지',
+  };
+}
+
+int _questDifficultyLevel(String difficulty) {
+  return switch (normalizeQuestDifficulty(difficulty)) {
+    '쉬움' => 1,
+    '보통' => 2,
+    _ => 3,
   };
 }
 

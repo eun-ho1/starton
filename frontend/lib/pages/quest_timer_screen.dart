@@ -21,7 +21,6 @@ class QuestTimerScreen extends StatefulWidget {
   const QuestTimerScreen({
     super.key,
     required this.quest,
-    required this.userLevel,
     required this.notificationsEnabled,
     this.autoStartOnOpen = false,
     this.onQuestChanged,
@@ -29,7 +28,6 @@ class QuestTimerScreen extends StatefulWidget {
   });
 
   final QuestItem quest;
-  final int userLevel;
   final bool notificationsEnabled;
   final bool autoStartOnOpen;
   final ValueChanged<QuestItem>? onQuestChanged;
@@ -147,7 +145,6 @@ class _QuestTimerScreenState extends State<QuestTimerScreen> {
                         useLandscapeLayout: useLandscapeLayout,
                         questSummary: QuestTimerSummary(
                           quest: _quest,
-                          userLevel: widget.userLevel,
                           earnedExp: _calculateEarnedExp(),
                           maxDurationSeconds: maxDurationSeconds,
                           onSubtaskSelect: _selectSubtask,

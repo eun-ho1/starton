@@ -24,7 +24,6 @@ void main() {
                         MaterialPageRoute<Object?>(
                           builder: (_) => QuestTimerScreen(
                             quest: _timedSubtaskQuest(),
-                            userLevel: 1,
                             notificationsEnabled: false,
                             onQuestChanged: changedQuests.add,
                           ),
@@ -93,7 +92,6 @@ void main() {
       MaterialApp(
         home: QuestTimerScreen(
           quest: _simpleQuest().copyWith(dueDate: DateTime(2026, 6, 12)),
-          userLevel: 1,
           notificationsEnabled: false,
         ),
       ),
@@ -101,6 +99,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('2026.06.12'), findsOneWidget);
+    expect(find.text('Lv.2'), findsOneWidget);
 
     final titleWidth = tester
         .getSize(find.byKey(const Key('quest_timer.title_box')))
@@ -134,7 +133,6 @@ void main() {
                   MaterialPageRoute<Object?>(
                     builder: (_) => QuestTimerScreen(
                       quest: _simpleQuest(),
-                      userLevel: 1,
                       notificationsEnabled: false,
                       onAiSuggestionRequested:
                           ({
@@ -194,7 +192,6 @@ void main() {
                     MaterialPageRoute<Object?>(
                       builder: (_) => QuestTimerScreen(
                         quest: _simpleQuest(),
-                        userLevel: 1,
                         notificationsEnabled: false,
                         onAiSuggestionRequested:
                             ({
@@ -261,7 +258,6 @@ void main() {
                       MaterialPageRoute<Object?>(
                         builder: (_) => QuestTimerScreen(
                           quest: _timedSubtaskQuest(),
-                          userLevel: 1,
                           notificationsEnabled: false,
                         ),
                       ),

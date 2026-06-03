@@ -917,7 +917,6 @@ class _AdFocusShellState extends State<AdFocusShell>
       MaterialPageRoute<Object?>(
         builder: (_) => QuestTimerScreen(
           quest: quest,
-          userLevel: _localData.level,
           notificationsEnabled: _notificationsEnabled,
           autoStartOnOpen: autoStartOnOpen,
           onQuestChanged: (updatedQuest) =>
