@@ -8,13 +8,13 @@ import 'package:start_on/models/quest_api_models.dart';
 import 'package:start_on/models/stats_api_models.dart';
 import 'package:start_on/models/task_intake_api_models.dart';
 import 'package:start_on/pages/add_quest_screen.dart';
-import 'package:start_on/pages/dungeon_screen.dart';
 import 'package:start_on/pages/home_screen.dart';
 import 'package:start_on/pages/login_screen.dart';
 import 'package:start_on/pages/quest_timer/quest_timer_bottom_sheet.dart';
 import 'package:start_on/pages/quest_timer_screen.dart';
 import 'package:start_on/pages/ranking_screen.dart';
 import 'package:start_on/pages/record_screen.dart';
+import 'package:start_on/pages/retry_screen.dart';
 import 'package:start_on/pages/settings_screen.dart';
 import 'package:start_on/pages/task_candidate_review_screen.dart';
 import 'package:start_on/repositories/auth_repository.dart';
@@ -318,7 +318,7 @@ class _AdFocusShellState extends State<AdFocusShell>
   bool _showQuestCelebration = false;
   int _questAutoAdvanceRemainingSeconds = 0;
   AppLocalData _localData = AppLocalData.initial();
-  List<DungeonStatusResponse> _serverDungeons = const [];
+  final Set<String> _skippedRetryQuestIds = <String>{};
   LeaderboardResponse? _leaderboard;
   Timer? _questAutoAdvanceTimer;
   String? _questAutoAdvanceQuestId;
@@ -461,10 +461,10 @@ class _AdFocusShellState extends State<AdFocusShell>
         onOpenSettings: _openSettings,
         onTabChange: _changeTab,
       ),
-      DungeonScreen(
-        dungeons: _visibleDungeons,
-        credits: _localData.credits,
-        onClearDungeon: _completeDungeon,
+      RetryScreen(
+        quests: _retryQuests,
+        onQuestStart: _openRetryQuest,
+        onSkipToday: _skipRetryToday,
       ),
       RankingScreen(data: _localData, leaderboard: _leaderboard),
       RecordScreen(data: _localData),
@@ -684,7 +684,6 @@ class _AdFocusShellState extends State<AdFocusShell>
       _replaceQuestById(_localData, originalQuest.id, updatedQuest),
     );
     unawaited(_deleteServerQuestAfterAiReplacement(originalQuest));
-    unawaited(_refreshDungeons());
     return updatedQuest;
   }
 
@@ -1026,7 +1025,6 @@ class _AdFocusShellState extends State<AdFocusShell>
         quests: _localData.quests.where((item) => item.id != quest.id).toList(),
       ),
     );
-    unawaited(_refreshDungeons());
   }
 
   void _updateQuest(
@@ -1041,51 +1039,21 @@ class _AdFocusShellState extends State<AdFocusShell>
     }
   }
 
-  void _completeDungeon(String dungeonId) {
-    unawaited(_completeDungeonAsync(dungeonId));
+  void _openRetryQuest(QuestItem quest) {
+    unawaited(_openQuestTimer(quest, autoStartOnOpen: true));
   }
 
-  Future<void> _completeDungeonAsync(String dungeonId) async {
-    final dungeonRepository = _dungeonRepository;
-    if (dungeonRepository != null) {
-      try {
-        final clearResult = await dungeonRepository.clearDungeon(dungeonId);
-        if (!mounted) {
-          return;
-        }
-        _setLocalData(
-          _localData.copyWith(
-            credits: clearResult.credits,
-            clearedDungeonIds: _withClearedDungeonId(
-              _localData.clearedDungeonIds,
-              clearResult.dungeonId,
-            ),
-          ),
-        );
-        unawaited(_refreshServerProgressData());
-        await _refreshDungeons();
-      } catch (error) {
-        _showQuestSyncError('던전 보상을 서버에 저장하지 못했어요.', error);
-      }
+  void _skipRetryToday() {
+    final skippedQuestIds = _retryQuests.map((quest) => quest.id).toSet();
+    if (skippedQuestIds.isEmpty) {
       return;
     }
 
-    final rewardTarget = _localData.completedQuests.where(
-      (item) => item.questId == dungeonId,
-    );
-    if (rewardTarget.isEmpty ||
-        _localData.clearedDungeonIds.contains(dungeonId)) {
-      return;
-    }
-
-    _setLocalData(
-      _store.completeDungeon(
-        _localData,
-        dungeonId: dungeonId,
-        creditReward: _creditRewardForQuestDifficulty(
-          rewardTarget.first.difficulty,
-        ),
-      ),
+    setState(() => _skippedRetryQuestIds.addAll(skippedQuestIds));
+    _showStyledSnackBar(
+      '오늘은 리도전 퀘스트를 건너뛰었어요.',
+      centerText: true,
+      compact: true,
     );
   }
 
@@ -1563,7 +1531,6 @@ class _AdFocusShellState extends State<AdFocusShell>
         stats: await statsFuture,
         dungeonList: dungeonList,
       );
-      _serverDungeons = dungeonList.dungeons;
       _leaderboard = leaderboard;
       await _store.save(data);
       return data;
@@ -1613,7 +1580,6 @@ class _AdFocusShellState extends State<AdFocusShell>
         dungeonList: dungeonList,
       );
 
-      _serverDungeons = dungeonList.dungeons;
       setState(() {
         _localData = nextData;
         _leaderboard = leaderboard;
@@ -1679,77 +1645,20 @@ class _AdFocusShellState extends State<AdFocusShell>
     );
   }
 
-  List<DungeonStatusResponse> get _visibleDungeons {
-    if (_usesServerData && _serverDungeons.isNotEmpty) {
-      return _serverDungeons;
-    }
-    return _buildLocalDungeonList();
-  }
-
-  List<DungeonStatusResponse> _buildLocalDungeonList() {
-    final dungeons = <DungeonStatusResponse>[];
-
-    for (final quest in _localData.quests) {
-      dungeons.add(
-        DungeonStatusResponse(
-          dungeonId: quest.id,
-          title: quest.title,
-          difficulty: questDifficultyToApi(quest.difficulty),
-          completed: false,
-          cleared: _localData.clearedDungeonIds.contains(quest.id),
-          canClaim: false,
-          creditReward: _creditRewardForQuestDifficulty(quest.difficulty),
-          clearedAt: null,
-        ),
-      );
-    }
-
-    for (final completedQuest in _localData.completedQuests) {
-      final isCleared = _localData.clearedDungeonIds.contains(
-        completedQuest.questId,
-      );
-      dungeons.add(
-        DungeonStatusResponse(
-          dungeonId: completedQuest.questId,
-          title: completedQuest.title,
-          difficulty: questDifficultyToApi(completedQuest.difficulty),
-          completed: true,
-          cleared: isCleared,
-          canClaim: !isCleared,
-          creditReward: _creditRewardForQuestDifficulty(
-            completedQuest.difficulty,
-          ),
-          clearedAt: null,
-        ),
-      );
-    }
-
-    return dungeons;
-  }
-
-  int _creditRewardForQuestDifficulty(String difficulty) {
-    return switch (normalizeQuestDifficulty(difficulty)) {
-      '?ъ?' => 8,
-      '?대젮?' => 16,
-      _ => 12,
-    };
-  }
-
-  Future<void> _refreshDungeons() async {
-    final dungeonRepository = _dungeonRepository;
-    if (dungeonRepository == null) {
-      return;
-    }
-
-    try {
-      final response = await dungeonRepository.listDungeons();
-      if (!mounted) {
-        return;
+  List<QuestItem> get _retryQuests {
+    return _localData.quests.where((quest) {
+      if (_skippedRetryQuestIds.contains(quest.id)) {
+        return false;
       }
-      setState(() => _serverDungeons = response.dungeons);
-    } catch (_) {
-      // Keep the current list if refresh fails.
-    }
+      if (quest.elapsedSeconds <= 0) {
+        return false;
+      }
+      final duration = quest.effectiveDurationSeconds;
+      if (duration <= 0) {
+        return false;
+      }
+      return quest.elapsedSeconds < duration;
+    }).toList();
   }
 
   List<QuestItem> _mergeServerQuestsWithLocalOnlyItems({
@@ -1775,7 +1684,6 @@ class _AdFocusShellState extends State<AdFocusShell>
       final createdQuest = await questRepository.createQuest(
         quest.toCreateRequest(),
       );
-      unawaited(_refreshDungeons());
       return QuestItem.fromApiResponse(createdQuest);
     } catch (error) {
       _showQuestSyncError('퀘스트를 서버에 저장하지 못했어요.', error);
@@ -1920,7 +1828,6 @@ class _AdFocusShellState extends State<AdFocusShell>
       _setLocalData(
         _replaceQuest(_localData, QuestItem.fromApiResponse(updatedQuest)),
       );
-      await _refreshDungeons();
     } catch (error) {
       _showQuestSyncError('퀘스트 변경사항을 서버에 저장하지 못했어요.', error);
     }
@@ -1968,7 +1875,6 @@ class _AdFocusShellState extends State<AdFocusShell>
           proofImagePath: completedRecord.proofImagePath,
         ),
       );
-      unawaited(_refreshDungeons());
       return CompletedQuestRecord.fromApiResponse(savedRecord);
     } catch (error) {
       _showQuestSyncError('퀘스트 완료를 서버에 저장하지 못했어요.', error);
@@ -2018,16 +1924,6 @@ class _AdFocusShellState extends State<AdFocusShell>
       }
     }
     return null;
-  }
-
-  List<String> _withClearedDungeonId(
-    List<String> clearedDungeonIds,
-    String dungeonId,
-  ) {
-    if (clearedDungeonIds.contains(dungeonId)) {
-      return clearedDungeonIds;
-    }
-    return [...clearedDungeonIds, dungeonId];
   }
 
   AppLocalData _replaceQuest(AppLocalData data, QuestItem updatedQuest) {
