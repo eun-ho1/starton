@@ -21,84 +21,116 @@ class QuestTimerSummary extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final categoryStyle = questCategoryStyleFor(quest.category);
+    final dueDate = quest.dueDate;
 
-    return Center(
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 320),
-        child: SizedBox(
-          width: double.infinity,
-          child: neu.Neumorphic(
-            style: neu.NeumorphicStyle(
-              depth: 7,
-              intensity: 0.9,
-              surfaceIntensity: 0.24,
-              color: const Color(0xFFF1F3F8),
-              shadowLightColor: Colors.white,
-              shadowDarkColor: const Color(0xFFD0D7E5),
-              boxShape: neu.NeumorphicBoxShape.roundRect(
-                BorderRadius.circular(14),
-              ),
-            ),
-            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 22),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
+    return SizedBox(
+      key: const Key('quest_timer.title_box'),
+      width: double.infinity,
+      child: neu.Neumorphic(
+        style: neu.NeumorphicStyle(
+          depth: 7,
+          intensity: 0.9,
+          surfaceIntensity: 0.24,
+          color: const Color(0xFFF1F3F8),
+          shadowLightColor: Colors.white,
+          shadowDarkColor: const Color(0xFFD0D7E5),
+          boxShape: neu.NeumorphicBoxShape.roundRect(BorderRadius.circular(14)),
+        ),
+        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 22),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
               children: [
-                Row(
-                  children: [
-                    Icon(
-                      _questTitleIconFor(categoryStyle.category),
-                      size: 22,
-                      color: Colors.black,
+                Icon(
+                  _questTitleIconFor(categoryStyle.category),
+                  size: 22,
+                  color: Colors.black,
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    quest.title,
+                    textAlign: TextAlign.left,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.w800,
+                      color: Color(0xFF1C2940),
                     ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Text(
-                        quest.title,
-                        textAlign: TextAlign.left,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.w800,
-                          color: Color(0xFF1C2940),
-                        ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      'Lv.$userLevel',
+                      style: const TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w900,
+                        color: Color(0xFF1C2940),
                       ),
                     ),
-                    const SizedBox(width: 12),
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.end,
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(
-                          'Lv.$userLevel',
-                          style: const TextStyle(
-                            fontSize: 15,
-                            fontWeight: FontWeight.w900,
-                            color: Color(0xFF1C2940),
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          '$earnedExp EXP',
-                          style: const TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w800,
-                            color: Color(0xFF7E899D),
-                          ),
-                        ),
-                      ],
+                    const SizedBox(height: 4),
+                    Text(
+                      '$earnedExp EXP',
+                      style: const TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w800,
+                        color: Color(0xFF7E899D),
+                      ),
                     ),
                   ],
                 ),
-                if (quest.subtasks.isNotEmpty) ...[
-                  const SizedBox(height: 18),
-                  _QuestSubtaskSummary(quest: quest, onSelect: onSubtaskSelect),
-                ],
               ],
+            ),
+            if (dueDate != null) ...[
+              const SizedBox(height: 12),
+              _QuestDueDateRow(dueDate: dueDate),
+            ],
+            if (quest.subtasks.isNotEmpty) ...[
+              const SizedBox(height: 18),
+              _QuestSubtaskSummary(quest: quest, onSelect: onSubtaskSelect),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _QuestDueDateRow extends StatelessWidget {
+  const _QuestDueDateRow({required this.dueDate});
+
+  final DateTime dueDate;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        const Icon(
+          Icons.event_available_rounded,
+          size: 16,
+          color: Colors.blueGrey,
+        ),
+        const SizedBox(width: 6),
+        Flexible(
+          child: Text(
+            formatQuestDueDate(dueDate),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              color: Color(0xFF5E6678),
+              fontSize: 12,
+              fontWeight: FontWeight.w800,
             ),
           ),
         ),
-      ),
+      ],
     );
   }
 }

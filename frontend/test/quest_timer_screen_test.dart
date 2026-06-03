@@ -79,6 +79,40 @@ void main() {
     },
   );
 
+  testWidgets('timer title box matches category width and shows due date', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: QuestTimerScreen(
+          quest: _simpleQuest().copyWith(dueDate: DateTime(2026, 6, 12)),
+          userLevel: 1,
+          notificationsEnabled: false,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('2026.06.12'), findsOneWidget);
+
+    final titleWidth = tester
+        .getSize(find.byKey(const Key('quest_timer.title_box')))
+        .width;
+    final categoryWidth = tester
+        .getSize(
+          find.byKey(const ValueKey<String>('quest_timer.category_bar.work')),
+        )
+        .width;
+    expect(titleWidth, moreOrLessEquals(categoryWidth, epsilon: 0.1));
+  });
+
   testWidgets('edit page AI button requests suggestion flow', (tester) async {
     tester.view.physicalSize = const Size(390, 844);
     tester.view.devicePixelRatio = 1;
