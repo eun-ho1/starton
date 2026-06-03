@@ -92,6 +92,7 @@ class SupabaseQuestRepository(QuestRepository):
             category=refreshed.category,
             elapsedSeconds=refreshed.elapsed_seconds,
             defaultDurationSeconds=refreshed.default_duration_seconds,
+            dueAt=refreshed.due_at,
         )
 
     def delete_quest(self, user_id: str, quest_id: str) -> None:
