@@ -1,6 +1,28 @@
 import 'package:flutter/material.dart';
 import 'package:start_on/models/app_local_data.dart';
 
+const Color _calendarSurfaceColor = Color(0xFFF1F3F6);
+const Color _calendarShadowDarkColor = Color(0xFFD7DCE7);
+const Color _calendarShadowLightColor = Color(0xFFF8FAFD);
+
+List<BoxShadow> _calendarRaisedShadows({
+  double blurRadius = 14,
+  double offset = 5,
+}) {
+  return [
+    BoxShadow(
+      color: _calendarShadowDarkColor,
+      blurRadius: blurRadius,
+      offset: Offset(offset, offset),
+    ),
+    BoxShadow(
+      color: _calendarShadowLightColor,
+      blurRadius: blurRadius,
+      offset: Offset(-offset, -offset),
+    ),
+  ];
+}
+
 class HomeQuestSectionHeader extends StatelessWidget {
   const HomeQuestSectionHeader({
     super.key,
@@ -119,14 +141,16 @@ class _HomeCalendarPageState extends State<_HomeCalendarPage> {
     ).length;
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF1F3F6),
+      backgroundColor: _calendarSurfaceColor,
       body: SafeArea(
         child: ListView(
           padding: const EdgeInsets.fromLTRB(20, 14, 20, 32),
           children: [
             _CalendarTopBar(
               onBack: () => Navigator.of(context).pop(),
-              onOpenBoard: _openCalendarBoard,
+              onOpenBoard: () {
+                _openCalendarBoard();
+              },
             ),
             const SizedBox(height: 18),
             _MonthCalendarCard(
@@ -211,9 +235,9 @@ class _HomeCalendarPageState extends State<_HomeCalendarPage> {
     });
   }
 
-  void _openCalendarBoard() {
-    Navigator.of(context).push(
-      MaterialPageRoute<void>(
+  Future<void> _openCalendarBoard() async {
+    final selectedMonth = await Navigator.of(context).push<DateTime>(
+      MaterialPageRoute<DateTime>(
         builder: (_) => _CalendarBoardPage(
           focusedMonth: _focusedMonth,
           quests: widget.quests,
@@ -221,6 +245,15 @@ class _HomeCalendarPageState extends State<_HomeCalendarPage> {
         ),
       ),
     );
+
+    if (!mounted || selectedMonth == null) {
+      return;
+    }
+
+    setState(() {
+      _focusedMonth = _monthOnly(selectedMonth);
+      _selectedDate = DateTime(_focusedMonth.year, _focusedMonth.month, 1);
+    });
   }
 }
 
@@ -281,14 +314,16 @@ class _CalendarBoardPage extends StatelessWidget {
     ];
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF1F3F6),
+      backgroundColor: _calendarSurfaceColor,
       body: SafeArea(
         child: ListView(
           padding: const EdgeInsets.fromLTRB(18, 14, 18, 30),
           children: [
             _CalendarBoardTopBar(
               year: focusedMonth.year,
-              onBack: () => Navigator.of(context).pop(),
+              onExit: () =>
+                  Navigator.of(context).popUntil((route) => route.isFirst),
+              onOpenMonth: () => Navigator.of(context).pop(),
             ),
             const SizedBox(height: 16),
             GridView.builder(
@@ -303,11 +338,15 @@ class _CalendarBoardPage extends StatelessWidget {
               itemCount: months.length,
               itemBuilder: (context, index) {
                 final month = months[index];
-                return _MultiMonthCalendarCard(
-                  month: month,
-                  isFocusedMonth: month.month == focusedMonth.month,
-                  quests: quests,
-                  completedRecords: completedRecords,
+                return GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: () => Navigator.of(context).pop(month),
+                  child: _MultiMonthCalendarCard(
+                    month: month,
+                    isFocusedMonth: month.month == focusedMonth.month,
+                    quests: quests,
+                    completedRecords: completedRecords,
+                  ),
                 );
               },
             ),
@@ -319,10 +358,15 @@ class _CalendarBoardPage extends StatelessWidget {
 }
 
 class _CalendarBoardTopBar extends StatelessWidget {
-  const _CalendarBoardTopBar({required this.year, required this.onBack});
+  const _CalendarBoardTopBar({
+    required this.year,
+    required this.onExit,
+    required this.onOpenMonth,
+  });
 
   final int year;
-  final VoidCallback onBack;
+  final VoidCallback onExit;
+  final VoidCallback onOpenMonth;
 
   @override
   Widget build(BuildContext context) {
@@ -330,8 +374,8 @@ class _CalendarBoardTopBar extends StatelessWidget {
       children: [
         _RoundIconButton(
           icon: Icons.arrow_back_ios_new_rounded,
-          tooltip: '뒤로',
-          onTap: onBack,
+          tooltip: '나가기',
+          onTap: onExit,
         ),
         Expanded(
           child: Center(
@@ -345,25 +389,10 @@ class _CalendarBoardTopBar extends StatelessWidget {
             ),
           ),
         ),
-        Container(
-          width: 40,
-          height: 40,
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(14),
-            boxShadow: const [
-              BoxShadow(
-                color: Color(0x14000000),
-                blurRadius: 12,
-                offset: Offset(0, 5),
-              ),
-            ],
-          ),
-          child: const Icon(
-            Icons.view_module_rounded,
-            color: Color(0xFF1C2940),
-            size: 19,
-          ),
+        _RoundIconButton(
+          icon: Icons.calendar_month_rounded,
+          tooltip: '월간 보기',
+          onTap: onOpenMonth,
         ),
       ],
     );
@@ -395,19 +424,13 @@ class _MultiMonthCalendarCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.fromLTRB(10, 10, 10, 9),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: _calendarSurfaceColor,
         borderRadius: BorderRadius.circular(17),
         border: Border.all(
           color: isFocusedMonth ? const Color(0xFFFF8B93) : Colors.transparent,
           width: 1.4,
         ),
-        boxShadow: const [
-          BoxShadow(
-            color: Color(0x12000000),
-            blurRadius: 14,
-            offset: Offset(0, 7),
-          ),
-        ],
+        boxShadow: _calendarRaisedShadows(blurRadius: 14, offset: 7),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -480,9 +503,9 @@ class _MultiMonthCalendarCard extends StatelessWidget {
                     ? const Color(0xFF6F63FF)
                     : isToday
                     ? const Color(0xFFFFE0E3)
-                    : const Color(0xFFF1F3F6);
+                    : _calendarSurfaceColor;
                 final textColor = hasQuest || hasDone
-                    ? Colors.white
+                    ? _calendarSurfaceColor
                     : isInMonth
                     ? const Color(0xFF1C2940)
                     : const Color(0xFFC8CDD6);
@@ -531,15 +554,9 @@ class _RoundIconButton extends StatelessWidget {
           width: 40,
           height: 40,
           decoration: BoxDecoration(
-            color: Colors.white,
+            color: _calendarSurfaceColor,
             borderRadius: BorderRadius.circular(14),
-            boxShadow: const [
-              BoxShadow(
-                color: Color(0x14000000),
-                blurRadius: 12,
-                offset: Offset(0, 5),
-              ),
-            ],
+            boxShadow: _calendarRaisedShadows(blurRadius: 12, offset: 5),
           ),
           child: Icon(icon, size: 18, color: const Color(0xFF1C2940)),
         ),
@@ -574,15 +591,9 @@ class _MonthCalendarCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 18),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: _calendarSurfaceColor,
         borderRadius: BorderRadius.circular(22),
-        boxShadow: const [
-          BoxShadow(
-            color: Color(0x17000000),
-            blurRadius: 18,
-            offset: Offset(0, 8),
-          ),
-        ],
+        boxShadow: _calendarRaisedShadows(blurRadius: 18, offset: 8),
       ),
       child: Column(
         children: [
@@ -723,7 +734,7 @@ class _CalendarDayCell extends StatelessWidget {
         padding: const EdgeInsets.symmetric(vertical: 6),
         decoration: BoxDecoration(
           color: isInMonth
-              ? (isSelected ? const Color(0xFFFFF1F2) : const Color(0xFFF8FAFD))
+              ? (isSelected ? const Color(0xFFFFF1F2) : _calendarSurfaceColor)
               : Colors.transparent,
           borderRadius: BorderRadius.circular(13),
           border: Border.all(color: borderColor, width: 1.4),
@@ -745,7 +756,7 @@ class _CalendarDayCell extends StatelessWidget {
                   '${day.day}',
                   style: TextStyle(
                     color: isSelected || isToday
-                        ? Colors.white
+                        ? _calendarSurfaceColor
                         : const Color(0xFF1C2940),
                     fontSize: 12,
                     fontWeight: FontWeight.w900,
@@ -799,15 +810,9 @@ class _CalendarMetricCard extends StatelessWidget {
       height: 82,
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: _calendarSurfaceColor,
         borderRadius: BorderRadius.circular(18),
-        boxShadow: const [
-          BoxShadow(
-            color: Color(0x10000000),
-            blurRadius: 14,
-            offset: Offset(0, 6),
-          ),
-        ],
+        boxShadow: _calendarRaisedShadows(blurRadius: 14, offset: 6),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -899,15 +904,9 @@ class _CalendarQuestTile extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: _calendarSurfaceColor,
         borderRadius: BorderRadius.circular(16),
-        boxShadow: const [
-          BoxShadow(
-            color: Color(0x0F000000),
-            blurRadius: 12,
-            offset: Offset(0, 6),
-          ),
-        ],
+        boxShadow: _calendarRaisedShadows(blurRadius: 12, offset: 6),
       ),
       child: Row(
         children: [
@@ -975,8 +974,9 @@ class _CalendarEmptyTile extends StatelessWidget {
       width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: _calendarSurfaceColor,
         borderRadius: BorderRadius.circular(16),
+        boxShadow: _calendarRaisedShadows(blurRadius: 12, offset: 5),
       ),
       child: Text(
         text,

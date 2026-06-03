@@ -748,11 +748,7 @@ class _AdFocusShellState extends State<AdFocusShell>
   }
 
   String _taskIntakeTextFromDraft(QuestItem draft) {
-    final prompt = draft.aiSubtaskPrompt?.trim();
-    if (prompt == null || prompt.isEmpty) {
-      return draft.title;
-    }
-    return '${draft.title}\n\nSubtask request: $prompt';
+    return draft.title;
   }
 
   Future<QuestItem?> _reviewAndCommitCandidate(

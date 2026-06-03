@@ -16,7 +16,7 @@ class HomeCompletedQuestSection extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Text(
-            'Finished Quest',
+            '완료된 퀘스트',
             style: TextStyle(
               fontSize: 20,
               fontWeight: FontWeight.w800,

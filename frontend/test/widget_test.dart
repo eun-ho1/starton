@@ -12,6 +12,7 @@ import 'package:start_on/models/quest_api_models.dart';
 import 'package:start_on/models/quest_item.dart';
 import 'package:start_on/models/stats_api_models.dart';
 import 'package:start_on/models/task_intake_api_models.dart';
+import 'package:start_on/pages/add_quest_screen.dart';
 import 'package:start_on/repositories/auth_repository.dart';
 import 'package:start_on/repositories/dungeon_repository.dart';
 import 'package:start_on/repositories/profile_repository.dart';
@@ -21,6 +22,31 @@ import 'package:start_on/repositories/task_intake_repository.dart';
 import 'package:start_on/services/api_client.dart';
 
 void main() {
+  testWidgets('add quest defaults due date to today', (tester) async {
+    await _setTallTestSurface(tester);
+    final today = normalizeQuestDueDate(DateTime.now());
+
+    final result = await _submitAddQuestFromScreen(tester, title: '오늘 기본 마감');
+
+    expect(result, isA<QuestItem>());
+    expect((result as QuestItem).dueDate, today);
+  });
+
+  testWidgets('add quest no due date button saves null due date', (
+    tester,
+  ) async {
+    await _setTallTestSurface(tester);
+
+    final result = await _submitAddQuestFromScreen(
+      tester,
+      title: '마감 없는 퀘스트',
+      clearDueDate: true,
+    );
+
+    expect(result, isA<QuestItem>());
+    expect((result as QuestItem).dueDate, isNull);
+  });
+
   testWidgets('renders login screen first', (tester) async {
     SharedPreferences.setMockInitialValues({});
 
@@ -406,10 +432,25 @@ void main() {
     await tester.enterText(find.byType(TextField).first, '컴비전 과제');
     await tester.tap(find.text('AI 제안 페이지로 이동'));
     await tester.pumpAndSettle();
+
+    expect(find.text('AI 프롬프트 선택'), findsOneWidget);
+    expect(find.text('쪼개기 선택'), findsOneWidget);
+    expect(find.text('Subtask 시간분배'), findsOneWidget);
+    expect(find.text('시간배분 모두 똑같이'), findsOneWidget);
+
     await tester.tap(find.text('다음'));
     await tester.pumpAndSettle();
 
-    expect(taskIntakeRepository.createRequests.single.text, '컴비전 과제');
+    final createRequest = taskIntakeRepository.createRequests.single;
+    expect(createRequest.text, '컴비전 과제');
+    expect(
+      createRequest.clientMetadata['subtask_generation_prompt'],
+      contains('subtask_prompt_mode=small_steps'),
+    );
+    expect(
+      createRequest.clientMetadata['subtask_generation_prompt'],
+      contains('time_allocation=equal'),
+    );
     expect(find.text('AI 제안 확인'), findsOneWidget);
     expect(find.text('컴퓨터비전 과제 제출 준비'), findsOneWidget);
 
@@ -793,6 +834,46 @@ void main() {
     expect(find.text('AI 제안 확인'), findsNothing);
     expect(find.text('로컬 퀘스트'), findsOneWidget);
   });
+}
+
+Future<Object?> _submitAddQuestFromScreen(
+  WidgetTester tester, {
+  required String title,
+  bool clearDueDate = false,
+}) async {
+  Object? result;
+  await tester.pumpWidget(
+    MaterialApp(
+      home: Scaffold(
+        body: Builder(
+          builder: (context) {
+            return TextButton(
+              onPressed: () async {
+                result = await Navigator.of(context).push<Object>(
+                  MaterialPageRoute(builder: (_) => const AddQuestScreen()),
+                );
+              },
+              child: const Text('open add quest'),
+            );
+          },
+        ),
+      ),
+    ),
+  );
+
+  await tester.tap(find.text('open add quest'));
+  await tester.pumpAndSettle();
+
+  if (clearDueDate) {
+    await tester.tap(find.byKey(const Key('add_quest.no_due_date_button')));
+    await tester.pump();
+  }
+
+  await tester.enterText(find.byType(TextField).first, title);
+  await tester.tap(find.text('Create task'));
+  await tester.pumpAndSettle();
+
+  return result;
 }
 
 Future<void> _setTallTestSurface(WidgetTester tester) async {

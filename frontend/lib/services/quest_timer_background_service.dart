@@ -10,7 +10,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:start_on/storage/app_settings_store.dart';
 
 const String _androidQuestTimerOngoingChannelId =
-    'start_on_quest_timer_ongoing';
+    'start_on_quest_timer_ongoing_v2';
 const String _androidQuestTimerCompleteChannelId =
     'start_on_quest_timer_complete';
 const int _questTimerOngoingNotificationId = 9042;
@@ -74,11 +74,9 @@ Future<void> _ensureQuestTimerNotificationChannels() async {
     await androidNotifications?.createNotificationChannel(
       const AndroidNotificationChannel(
         _androidQuestTimerOngoingChannelId,
-        '퀘스트 진행 상태',
-        description: '진행 중인 퀘스트 타이머 상태 표시',
-        importance: Importance.low,
-        playSound: false,
-        enableVibration: false,
+        '퀘스트 진행 알림',
+        description: '타이머가 실행 중일 때 남은 시간을 표시합니다.',
+        importance: Importance.high,
         showBadge: false,
       ),
     );
@@ -125,6 +123,71 @@ Future<void> _showQuestTimerCompleteNotification(
         iOS: DarwinNotificationDetails(),
       ),
     );
+  } on MissingPluginException {
+    return;
+  } on PlatformException {
+    return;
+  }
+}
+
+int _questTimerEndTimeMillis(QuestTimerSnapshot snapshot) {
+  final remainingSeconds =
+      snapshot.defaultDurationSeconds - snapshot.elapsedSeconds;
+  final clampedRemainingSeconds = remainingSeconds > 0 ? remainingSeconds : 0;
+  return DateTime.now()
+      .add(Duration(seconds: clampedRemainingSeconds))
+      .millisecondsSinceEpoch;
+}
+
+Future<void> _showQuestTimerOngoingNotification(
+  QuestTimerSnapshot snapshot,
+) async {
+  if (kIsWeb || defaultTargetPlatform != TargetPlatform.android) {
+    return;
+  }
+
+  try {
+    await _ensureQuestTimerNotificationChannels();
+    await _questTimerNotifications.show(
+      id: _questTimerOngoingNotificationId,
+      title: '퀘스트 진행 중',
+      body: snapshot.questTitle.isEmpty ? '남은 시간을 확인하세요.' : snapshot.questTitle,
+      notificationDetails: NotificationDetails(
+        android: AndroidNotificationDetails(
+          _androidQuestTimerOngoingChannelId,
+          '퀘스트 진행 알림',
+          channelDescription: '타이머가 실행 중일 때 남은 시간을 표시합니다.',
+          icon: _questTimerNotificationIcon,
+          importance: Importance.high,
+          priority: Priority.high,
+          visibility: NotificationVisibility.public,
+          category: AndroidNotificationCategory.alarm,
+          ongoing: true,
+          autoCancel: false,
+          onlyAlertOnce: true,
+          showWhen: true,
+          when: _questTimerEndTimeMillis(snapshot),
+          usesChronometer: true,
+          chronometerCountDown: true,
+        ),
+        iOS: DarwinNotificationDetails(),
+      ),
+    );
+  } on MissingPluginException {
+    return;
+  } on PlatformException {
+    return;
+  }
+}
+
+Future<void> _cancelQuestTimerOngoingNotification() async {
+  if (kIsWeb || defaultTargetPlatform != TargetPlatform.android) {
+    return;
+  }
+
+  try {
+    await _ensureQuestTimerNotificationChannels();
+    await _questTimerNotifications.cancel(id: _questTimerOngoingNotificationId);
   } on MissingPluginException {
     return;
   } on PlatformException {
@@ -331,6 +394,8 @@ class QuestTimerBackgroundService {
 
     if (await _isServiceRunning()) {
       _service.invoke(_questTimerPauseAction, snapshot.toMap());
+    } else {
+      await _cancelQuestTimerOngoingNotification();
     }
   }
 
@@ -343,6 +408,8 @@ class QuestTimerBackgroundService {
 
     if (await _isServiceRunning()) {
       _service.invoke(_questTimerStopAction);
+    } else {
+      await _cancelQuestTimerOngoingNotification();
     }
   }
 
@@ -457,19 +524,6 @@ void questTimerBackgroundOnStart(ServiceInstance service) async {
     await prefs.remove(_prefsIsRunningKey);
   }
 
-  Future<void> updateOngoingNotification(QuestTimerSnapshot snapshot) async {
-    if (service is! AndroidServiceInstance) {
-      return;
-    }
-
-    await service.setForegroundNotificationInfo(
-      title: '퀘스트 진행 중',
-      content: snapshot.questTitle.isEmpty
-          ? '타이머가 백그라운드에서 실행 중입니다.'
-          : snapshot.questTitle,
-    );
-  }
-
   Future<void> emitSnapshot(QuestTimerSnapshot snapshot) async {
     service.invoke(_questTimerTickEvent, snapshot.toMap());
   }
@@ -481,7 +535,7 @@ void questTimerBackgroundOnStart(ServiceInstance service) async {
 
   Future<void> startTicker(QuestTimerSnapshot snapshot) async {
     stopTicker();
-    await updateOngoingNotification(snapshot);
+    await _showQuestTimerOngoingNotification(snapshot);
     await emitSnapshot(snapshot);
 
     ticker = Timer.periodic(const Duration(seconds: 1), (_) async {
@@ -540,12 +594,14 @@ void questTimerBackgroundOnStart(ServiceInstance service) async {
     await persistSnapshot(pausedSnapshot);
     await emitSnapshot(pausedSnapshot);
     stopTicker();
+    await _cancelQuestTimerOngoingNotification();
     service.stopSelf();
   });
 
   service.on(_questTimerStopAction).listen((_) async {
     stopTicker();
     await clearSnapshot();
+    await _cancelQuestTimerOngoingNotification();
     service.stopSelf();
   });
 }

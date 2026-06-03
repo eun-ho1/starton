@@ -7,13 +7,11 @@ class HomeQuestCard extends StatelessWidget {
   const HomeQuestCard({
     super.key,
     required this.quest,
-    required this.priorityRank,
     required this.onTap,
     required this.onDelete,
   });
 
   final QuestItem quest;
-  final int priorityRank;
   final VoidCallback onTap;
   final VoidCallback onDelete;
 
@@ -64,15 +62,6 @@ class HomeQuestCard extends StatelessWidget {
                             ),
                           ),
                           const SizedBox(width: 8),
-                          Text(
-                            '추천 우선 순위 $priorityRank위',
-                            style: const TextStyle(
-                              color: Color(0xFF6F63FF),
-                              fontSize: 11,
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                          const SizedBox(width: 2),
                           SizedBox(
                             width: 24,
                             height: 24,
