@@ -8,11 +8,13 @@ import 'package:start_on/models/app_local_data.dart';
 import 'package:start_on/pages/quest_timer/quest_timer_sections.dart';
 import 'package:start_on/services/quest_timer_background_service.dart';
 import 'package:start_on/storage/quest_image_store.dart';
+import 'package:start_on/widgets/ai_quest_creation_progress_overlay.dart';
 
 typedef QuestAiSuggestionRequestHandler =
     Future<QuestItem?> Function({
       required QuestItem originalQuest,
       required QuestItem draft,
+      ValueChanged<bool>? onCreationLoadingChanged,
     });
 
 class QuestTimerScreen extends StatefulWidget {
@@ -72,6 +74,7 @@ class _QuestTimerScreenState extends State<QuestTimerScreen> {
   bool _hasStarted = false;
   bool _running = false;
   bool _isCompleting = false;
+  bool _isGeneratingAiSuggestion = false;
 
   @override
   void initState() {
@@ -115,77 +118,86 @@ class _QuestTimerScreenState extends State<QuestTimerScreen> {
       },
       child: Scaffold(
         backgroundColor: const Color(0xFFF1F3F8),
-        body: SafeArea(
-          child: LayoutBuilder(
-            builder: (context, constraints) {
-              final useLandscapeLayout =
-                  constraints.maxWidth > constraints.maxHeight &&
-                  constraints.maxWidth >= 640;
+        body: Stack(
+          children: [
+            SafeArea(
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  final useLandscapeLayout =
+                      constraints.maxWidth > constraints.maxHeight &&
+                      constraints.maxWidth >= 640;
 
-              return ListView(
-                padding: EdgeInsets.fromLTRB(
-                  useLandscapeLayout ? 30 : 22,
-                  useLandscapeLayout ? 20 : 16,
-                  useLandscapeLayout ? 30 : 22,
-                  32,
-                ),
-                children: [
-                  if (!useLandscapeLayout) ...[
-                    QuestTimerHeader(
-                      onBack: _popWithProgress,
-                      onEdit: _editQuest,
+                  return ListView(
+                    padding: EdgeInsets.fromLTRB(
+                      useLandscapeLayout ? 30 : 22,
+                      useLandscapeLayout ? 20 : 16,
+                      useLandscapeLayout ? 30 : 22,
+                      32,
                     ),
-                    const SizedBox(height: 18),
-                  ],
-                  // 세로 화면은 기존 흐름을 유지하고, 가로 화면에서만 타이머를 오른쪽에 배치한다.
-                  QuestTimerContentCard(
-                    useLandscapeLayout: useLandscapeLayout,
-                    questSummary: QuestTimerSummary(
-                      quest: _quest,
-                      userLevel: widget.userLevel,
-                      earnedExp: _calculateEarnedExp(),
-                      maxDurationSeconds: maxDurationSeconds,
-                      onSubtaskSelect: _selectSubtask,
-                    ),
-                    countdown: QuestTimerCountdown(
-                      controller: _countDownController,
-                      durationSeconds: maxDurationSeconds,
-                      elapsedSeconds: _elapsedSeconds,
-                      timerViewRevision: _timerViewRevision,
-                      running: _running,
-                      onComplete: _handleTimerComplete,
-                      onToggleTimer: _toggleTimer,
-                      formatDuration: _formatDuration,
-                    ),
-                    actionButtons: QuestTimerActionButtons(
-                      isCompleting: _isCompleting,
-                      running: _running,
-                      canReset: _elapsedSeconds > 0,
-                      // 임시수정: 테스트 중에는 1분 제한 없이 바로 완료 가능하게 둔다.
-                      canComplete: _elapsedSeconds >= 0,
-                      onResetTimer: _resetTimer,
-                      onToggleTimer: _toggleTimer,
-                      onStopTimer: _completeQuest,
-                    ),
-                    proofSection: QuestTimerProofSection(
-                      proofImagePath: _proofImage?.path,
-                      isCompleting: _isCompleting,
-                      compact: useLandscapeLayout,
-                      onPickCamera: () => _pickProofImage(ImageSource.camera),
-                      onPickGallery: () => _pickProofImage(ImageSource.gallery),
-                      onClearImage: () => setState(() => _proofImage = null),
-                    ),
-                    categoryTimes: QuestTimerCategoryTimes(
-                      category: _quest.category,
-                      elapsedSeconds: _elapsedSeconds,
-                      compact: useLandscapeLayout,
-                      formatDuration: _formatDuration,
-                    ),
-                  ),
-                ],
-              );
-            },
-          ),
+                    children: [
+                      if (!useLandscapeLayout) ...[
+                        QuestTimerHeader(
+                          onBack: _popWithProgress,
+                          onEdit: _editQuest,
+                        ),
+                        const SizedBox(height: 18),
+                      ],
+                      // 세로 화면은 기존 흐름을 유지하고, 가로 화면에서만 타이머를 오른쪽에 배치한다.
+                      QuestTimerContentCard(
+                        useLandscapeLayout: useLandscapeLayout,
+                        questSummary: QuestTimerSummary(
+                          quest: _quest,
+                          userLevel: widget.userLevel,
+                          earnedExp: _calculateEarnedExp(),
+                          maxDurationSeconds: maxDurationSeconds,
+                          onSubtaskSelect: _selectSubtask,
+                        ),
+                        countdown: QuestTimerCountdown(
+                          controller: _countDownController,
+                          durationSeconds: maxDurationSeconds,
+                          elapsedSeconds: _elapsedSeconds,
+                          timerViewRevision: _timerViewRevision,
+                          running: _running,
+                          onComplete: _handleTimerComplete,
+                          onToggleTimer: _toggleTimer,
+                          formatDuration: _formatDuration,
+                        ),
+                        actionButtons: QuestTimerActionButtons(
+                          isCompleting: _isCompleting,
+                          running: _running,
+                          canReset: _elapsedSeconds > 0,
+                          // 임시수정: 테스트 중에는 1분 제한 없이 바로 완료 가능하게 둔다.
+                          canComplete: _elapsedSeconds >= 0,
+                          onResetTimer: _resetTimer,
+                          onToggleTimer: _toggleTimer,
+                          onStopTimer: _completeQuest,
+                        ),
+                        proofSection: QuestTimerProofSection(
+                          proofImagePath: _proofImage?.path,
+                          isCompleting: _isCompleting,
+                          compact: useLandscapeLayout,
+                          onPickCamera: () =>
+                              _pickProofImage(ImageSource.camera),
+                          onPickGallery: () =>
+                              _pickProofImage(ImageSource.gallery),
+                          onClearImage: () =>
+                              setState(() => _proofImage = null),
+                        ),
+                        categoryTimes: QuestTimerCategoryTimes(
+                          category: _quest.category,
+                          elapsedSeconds: _elapsedSeconds,
+                          compact: useLandscapeLayout,
+                          formatDuration: _formatDuration,
+                        ),
+                      ),
+                    ],
+                  );
+                },
+              ),
+            ),
+            if (_isGeneratingAiSuggestion)
+              const AiQuestCreationProgressOverlay(),
+          ],
         ),
       ),
     );
@@ -345,10 +357,16 @@ class _QuestTimerScreenState extends State<QuestTimerScreen> {
         return;
       }
 
-      final suggestedQuest = await suggestionHandler(
-        originalQuest: _quest.copyWith(elapsedSeconds: _elapsedSeconds),
-        draft: request.draft.copyWith(elapsedSeconds: _elapsedSeconds),
-      );
+      final QuestItem? suggestedQuest;
+      try {
+        suggestedQuest = await suggestionHandler(
+          originalQuest: _quest.copyWith(elapsedSeconds: _elapsedSeconds),
+          draft: request.draft.copyWith(elapsedSeconds: _elapsedSeconds),
+          onCreationLoadingChanged: _setAiSuggestionLoading,
+        );
+      } finally {
+        _setAiSuggestionLoading(false);
+      }
       if (!mounted || suggestedQuest == null) {
         return;
       }
@@ -362,6 +380,14 @@ class _QuestTimerScreenState extends State<QuestTimerScreen> {
     }
 
     await _applyEditedQuest(result);
+  }
+
+  void _setAiSuggestionLoading(bool isLoading) {
+    if (!mounted || _isGeneratingAiSuggestion == isLoading) {
+      return;
+    }
+
+    setState(() => _isGeneratingAiSuggestion = isLoading);
   }
 
   Future<void> _applyEditedQuest(QuestItem updatedQuest) async {

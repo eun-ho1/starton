@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:start_on/models/completed_quest_record.dart';
@@ -104,6 +106,7 @@ void main() {
                           ({
                             required QuestItem originalQuest,
                             required QuestItem draft,
+                            ValueChanged<bool>? onCreationLoadingChanged,
                           }) async {
                             requestedOriginalQuest = originalQuest;
                             requestedDraft = draft;
@@ -127,11 +130,81 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('AI 제안 페이지로 이동'));
     await tester.pumpAndSettle();
+    await tester.tap(find.text('다음'));
+    await tester.pumpAndSettle();
 
     expect(requestedOriginalQuest?.id, 'quest-simple');
     expect(requestedDraft?.title, '단일 작업');
     expect(find.text('AI 제안 결과'), findsOneWidget);
   });
+
+  testWidgets(
+    'edit page shows AI creation loading while suggestion is pending',
+    (tester) async {
+      tester.view.physicalSize = const Size(390, 844);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
+
+      final suggestionCompleter = Completer<QuestItem?>();
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Builder(
+            builder: (context) {
+              return TextButton(
+                onPressed: () {
+                  Navigator.of(context).push<Object?>(
+                    MaterialPageRoute<Object?>(
+                      builder: (_) => QuestTimerScreen(
+                        quest: _simpleQuest(),
+                        userLevel: 1,
+                        notificationsEnabled: false,
+                        onAiSuggestionRequested:
+                            ({
+                              required QuestItem originalQuest,
+                              required QuestItem draft,
+                              ValueChanged<bool>? onCreationLoadingChanged,
+                            }) {
+                              onCreationLoadingChanged?.call(true);
+                              return suggestionCompleter.future;
+                            },
+                      ),
+                    ),
+                  );
+                },
+                child: const Text('open timer'),
+              );
+            },
+          ),
+        ),
+      );
+
+      await tester.tap(find.text('open timer'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byIcon(Icons.edit_rounded));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('AI 제안 페이지로 이동'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('다음'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 350));
+
+      expect(find.text('AI 퀘스트 생성 중...'), findsOneWidget);
+      expect(find.text('AI 제안 페이지를 준비하고 있어요.'), findsOneWidget);
+      expect(find.byType(LinearProgressIndicator), findsOneWidget);
+      expect(find.textContaining('%'), findsOneWidget);
+
+      suggestionCompleter.complete(_simpleQuest().copyWith(title: 'AI 제안 결과'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('AI 퀘스트 생성 중...'), findsNothing);
+      expect(find.text('AI 제안 결과'), findsOneWidget);
+    },
+  );
 
   testWidgets('edit page delete button returns delete result', (tester) async {
     tester.view.physicalSize = const Size(390, 844);

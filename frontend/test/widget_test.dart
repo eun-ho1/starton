@@ -406,6 +406,8 @@ void main() {
     await tester.enterText(find.byType(TextField).first, '컴비전 과제');
     await tester.tap(find.text('AI 제안 페이지로 이동'));
     await tester.pumpAndSettle();
+    await tester.tap(find.text('다음'));
+    await tester.pumpAndSettle();
 
     expect(taskIntakeRepository.createRequests.single.text, '컴비전 과제');
     expect(find.text('AI 제안 확인'), findsOneWidget);
@@ -487,6 +489,47 @@ void main() {
     expect(subtaskAfterReopen['completedAt'], isNull);
     expect(subtaskAfterReopen['elapsedSeconds'], 0);
     expect(repositories.questRepository.updateCallCount, 0);
+  });
+
+  testWidgets('server add quest creates regular quest without AI candidate', (
+    tester,
+  ) async {
+    await _setTallTestSurface(tester);
+    SharedPreferences.setMockInitialValues({
+      'auth.is_signed_in': true,
+      'auth.user_id': 'user-1',
+      'auth.email': 'tester@starton.local',
+      'auth.display_name': 'Tester',
+      'auth.access_token': 'access-token',
+      'settings.notifications_enabled': false,
+    });
+    final taskIntakeRepository = _FakeTaskIntakeRepository();
+    final repositories = _FakeServerRepositories(
+      taskIntakeRepository: taskIntakeRepository,
+    );
+
+    await tester.pumpWidget(
+      AdFocusApp(
+        profileRepository: repositories.profileRepository,
+        questRepository: repositories.questRepository,
+        statsRepository: repositories.statsRepository,
+        dungeonRepository: repositories.dungeonRepository,
+        taskIntakeRepository: repositories.taskIntakeRepository,
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    await tester.tap(find.byIcon(Icons.add_rounded));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField).first, '일반 과제');
+    await tester.tap(find.text('Create task'));
+    await tester.pumpAndSettle();
+
+    expect(taskIntakeRepository.createRequests, isEmpty);
+    expect(repositories.questRepository.createRequests.single.title, '일반 과제');
+    expect(find.text('AI 제안 확인'), findsNothing);
+    expect(find.text('일반 과제'), findsOneWidget);
   });
 
   testWidgets('server add quest can save manually entered subtasks locally', (
@@ -593,6 +636,8 @@ void main() {
     await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextField).first, '컴비전 과제');
     await tester.tap(find.text('AI 제안 페이지로 이동'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('다음'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
 
@@ -654,7 +699,9 @@ void main() {
     await tester.tap(find.byIcon(Icons.add_rounded));
     await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextField).first, '컴비전 과제');
-    await tester.tap(find.text('Create task'));
+    await tester.tap(find.text('AI 제안 페이지로 이동'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('다음'));
     await tester.pumpAndSettle();
 
     await tester.tap(find.text('이대로 저장'));
@@ -710,7 +757,9 @@ void main() {
     await tester.tap(find.byIcon(Icons.add_rounded));
     await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextField).first, '취소할 과제');
-    await tester.tap(find.text('Create task'));
+    await tester.tap(find.text('AI 제안 페이지로 이동'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('다음'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('취소'));
     await tester.pumpAndSettle();
@@ -870,6 +919,7 @@ class _FakeQuestRepository extends QuestRepository {
       super(apiClient: _UnusedApiClient());
 
   final List<QuestItemResponse> quests;
+  final List<QuestCreateRequest> createRequests = [];
   int listCallCount = 0;
   int updateCallCount = 0;
 
@@ -877,6 +927,21 @@ class _FakeQuestRepository extends QuestRepository {
   Future<List<QuestItemResponse>> listQuests() async {
     listCallCount += 1;
     return quests;
+  }
+
+  @override
+  Future<QuestItemResponse> createQuest(QuestCreateRequest request) async {
+    createRequests.add(request);
+    return QuestItemResponse(
+      id: 'created-quest',
+      title: request.title,
+      exp: request.exp,
+      difficulty: request.difficulty,
+      category: request.category,
+      elapsedSeconds: 0,
+      defaultDurationSeconds: request.defaultDurationSeconds,
+      dueAt: request.dueAt,
+    );
   }
 
   @override
