@@ -1,7 +1,7 @@
 from datetime import datetime
 from enum import StrEnum
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class QuestDifficulty(StrEnum):
@@ -18,6 +18,8 @@ class QuestCategory(StrEnum):
 
 
 class QuestItemResponse(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
     id: str = Field(..., description="Quest id stored in Supabase.")
     title: str = Field(..., min_length=1, max_length=120, examples=["Prepare weekly report"])
     exp: int = Field(..., ge=0, le=10000, description="Configured quest EXP reward.")
@@ -38,6 +40,8 @@ class QuestItemResponse(BaseModel):
 
 
 class QuestCreateRequest(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
     title: str = Field(..., min_length=1, max_length=120, examples=["Prepare weekly report"])
     exp: int = Field(..., ge=0, le=10000, examples=[50])
     difficulty: QuestDifficulty = Field(..., examples=["normal"])
@@ -52,6 +56,8 @@ class QuestCreateRequest(BaseModel):
 
 
 class QuestUpdateRequest(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
     title: str = Field(..., min_length=1, max_length=120, examples=["Prepare weekly report"])
     exp: int = Field(..., ge=0, le=10000, examples=[50])
     difficulty: QuestDifficulty = Field(..., examples=["normal"])
