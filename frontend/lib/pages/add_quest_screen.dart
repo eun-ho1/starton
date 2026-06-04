@@ -250,6 +250,48 @@ class _AddQuestScreenState extends State<AddQuestScreen> {
                   ],
                 ),
                 const SizedBox(height: 14),
+                const _DialogSectionLabel('Level'),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    for (var i = 0; i < _difficultyOptions.length; i++) ...[
+                      Expanded(
+                        child: _LevelChip(
+                          label: _difficultyOptions[i],
+                          selected: _difficultyOptions[i] == _difficulty,
+                          onTap: () => setState(
+                            () => _difficulty = _difficultyOptions[i],
+                          ),
+                        ),
+                      ),
+                      if (i != _difficultyOptions.length - 1)
+                        const SizedBox(width: 14),
+                    ],
+                  ],
+                ),
+                const SizedBox(height: 14),
+                const _DialogSectionLabel('Category'),
+                const SizedBox(height: 10),
+                Row(
+                  children: [
+                    for (var i = 0; i < _categoryOptions.length; i++) ...[
+                      Expanded(
+                        child: _CategoryChip(
+                          label: questCategoryLabel(
+                            _categoryOptions[i],
+                          ).toUpperCase(),
+                          selected: _categoryOptions[i] == _category,
+                          style: _categoryChipStyleFor(_categoryOptions[i]),
+                          onTap: () =>
+                              setState(() => _category = _categoryOptions[i]),
+                        ),
+                      ),
+                      if (i != _categoryOptions.length - 1)
+                        const SizedBox(width: 10),
+                    ],
+                  ],
+                ),
+                const SizedBox(height: 14),
                 const _DialogSectionLabel('Subtasks'),
                 const SizedBox(height: 8),
                 Row(
@@ -328,48 +370,6 @@ class _AddQuestScreenState extends State<AddQuestScreen> {
                     ),
                   ),
                 ],
-                const SizedBox(height: 14),
-                const _DialogSectionLabel('Level'),
-                const SizedBox(height: 8),
-                Row(
-                  children: [
-                    for (var i = 0; i < _difficultyOptions.length; i++) ...[
-                      Expanded(
-                        child: _LevelChip(
-                          label: _difficultyOptions[i],
-                          selected: _difficultyOptions[i] == _difficulty,
-                          onTap: () => setState(
-                            () => _difficulty = _difficultyOptions[i],
-                          ),
-                        ),
-                      ),
-                      if (i != _difficultyOptions.length - 1)
-                        const SizedBox(width: 14),
-                    ],
-                  ],
-                ),
-                const SizedBox(height: 14),
-                const _DialogSectionLabel('Category'),
-                const SizedBox(height: 10),
-                Row(
-                  children: [
-                    for (var i = 0; i < _categoryOptions.length; i++) ...[
-                      Expanded(
-                        child: _CategoryChip(
-                          label: questCategoryLabel(
-                            _categoryOptions[i],
-                          ).toUpperCase(),
-                          selected: _categoryOptions[i] == _category,
-                          style: _categoryChipStyleFor(_categoryOptions[i]),
-                          onTap: () =>
-                              setState(() => _category = _categoryOptions[i]),
-                        ),
-                      ),
-                      if (i != _categoryOptions.length - 1)
-                        const SizedBox(width: 10),
-                    ],
-                  ],
-                ),
                 const SizedBox(height: 30),
                 SizedBox(
                   width: double.infinity,
@@ -1008,7 +1008,9 @@ class _LevelChip extends StatelessWidget {
             depth: selected ? -4 : 6,
             intensity: selected ? 0.8 : 0.95,
             surfaceIntensity: selected ? 0.12 : 0.2,
-            color: _AddQuestScreenState._dialogColor,
+            color: selected
+                ? const Color(0xFFDAD3FF)
+                : _AddQuestScreenState._dialogColor,
             shadowDarkColor: selected
                 ? const Color(0x18000000)
                 : const Color(0x33000000),
@@ -1059,7 +1061,9 @@ class _CategoryChip extends StatelessWidget {
             depth: selected ? -3.5 : 5,
             intensity: selected ? 0.8 : 0.95,
             surfaceIntensity: selected ? 0.12 : 0.2,
-            color: _AddQuestScreenState._dialogColor,
+            color: selected
+                ? const Color(0xFFDAD3FF)
+                : _AddQuestScreenState._dialogColor,
             shadowDarkColor: selected
                 ? const Color(0x18000000)
                 : const Color(0x33000000),

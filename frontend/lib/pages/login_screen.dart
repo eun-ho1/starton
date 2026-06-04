@@ -1,8 +1,13 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_neumorphic_plus/flutter_neumorphic.dart' as neu;
 import 'package:start_on/repositories/auth_repository.dart';
 import 'package:start_on/services/api_client.dart';
+
+const Color _loginSurfaceColor = Color(0xFFF1F2F6);
+const Color _loginPrimaryColor = Color(0xFF6F63FF);
+const String _appIconAsset = 'web/icons/Icon-192.png';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({
@@ -42,16 +47,10 @@ class _LoginScreenState extends State<LoginScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF7FAFF),
+      backgroundColor: _loginSurfaceColor,
       resizeToAvoidBottomInset: true,
-      body: Container(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [Color(0xFFFFF8EF), Color(0xFFF6FAFF), Color(0xFFFFF0F3)],
-          ),
-        ),
+      body: ColoredBox(
+        color: _loginSurfaceColor,
         child: SafeArea(
           child: LayoutBuilder(
             builder: (context, constraints) {
@@ -266,49 +265,41 @@ class _LoginHero extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Container(
-          width: 62,
-          height: 62,
-          decoration: BoxDecoration(
-            color: const Color(0xFF1C2940),
-            borderRadius: BorderRadius.circular(20),
-            boxShadow: [
-              BoxShadow(
-                color: const Color(0xFF8F9DB6).withValues(alpha: 0.22),
-                blurRadius: 20,
-                offset: const Offset(0, 10),
-              ),
-            ],
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(10, 10, 10, 20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 72,
+            height: 72,
+            child: Image.asset(
+              _appIconAsset,
+              fit: BoxFit.cover,
+              filterQuality: FilterQuality.high,
+            ),
           ),
-          child: const Icon(
-            Icons.bolt_rounded,
-            color: Color(0xFFF6B42D),
-            size: 34,
+          const SizedBox(height: 24),
+          const Text(
+            "START ON",
+            style: TextStyle(
+              fontSize: 30,
+              fontWeight: FontWeight.w900,
+              color: Color(0xFF07080A),
+              height: 1,
+            ),
           ),
-        ),
-        const SizedBox(height: 24),
-        const Text(
-          'START ON',
-          style: TextStyle(
-            fontSize: 30,
-            fontWeight: FontWeight.w900,
-            color: Color(0xFF07080A),
-            height: 1,
+          const SizedBox(height: 10),
+          const Text(
+            "오늘도 시작해 볼까요?",
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.w700,
+              color: Color(0xFF33415C),
+            ),
           ),
-        ),
-        const SizedBox(height: 10),
-        const Text(
-          '오늘도 시작해 볼까요?',
-          style: TextStyle(
-            fontSize: 18,
-            fontWeight: FontWeight.w700,
-            color: Color(0xFF33415C),
-          ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 }
@@ -342,124 +333,139 @@ class _LoginFormCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final isSignUp = mode == _AuthMode.signUp;
 
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.9),
-        borderRadius: BorderRadius.circular(24),
-        boxShadow: [
-          BoxShadow(
-            color: const Color(0xFFB8C7DE).withValues(alpha: 0.24),
-            blurRadius: 28,
-            offset: const Offset(0, 14),
-          ),
-        ],
+    return neu.Neumorphic(
+      style: neu.NeumorphicStyle(
+        depth: 8,
+        intensity: 0.9,
+        surfaceIntensity: 0.18,
+        color: _loginSurfaceColor,
+        shadowDarkColor: const Color(0xFFD4DDEB),
+        shadowLightColor: Colors.white,
+        boxShape: neu.NeumorphicBoxShape.roundRect(BorderRadius.circular(24)),
       ),
-      child: Padding(
-        padding: const EdgeInsets.all(22),
-        child: Form(
-          key: formKey,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      isSignUp ? '회원가입' : '로그인',
-                      style: const TextStyle(
-                        fontSize: 22,
-                        fontWeight: FontWeight.w900,
-                        color: Color(0xFF1C2940),
-                      ),
+      padding: const EdgeInsets.all(22),
+      child: Form(
+        key: formKey,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    isSignUp ? "회원가입" : "로그인",
+                    style: const TextStyle(
+                      fontSize: 22,
+                      fontWeight: FontWeight.w900,
+                      color: Color(0xFF1C2940),
                     ),
                   ),
-                  SegmentedButton<_AuthMode>(
-                    showSelectedIcon: false,
-                    segments: const [
-                      ButtonSegment<_AuthMode>(
-                        value: _AuthMode.signIn,
-                        label: Text('로그인'),
-                      ),
-                      ButtonSegment<_AuthMode>(
-                        value: _AuthMode.signUp,
-                        label: Text('가입'),
-                      ),
-                    ],
-                    selected: {mode},
-                    onSelectionChanged: isSubmitting
-                        ? null
-                        : (selected) => onModeChanged(selected.single),
-                    style: ButtonStyle(
-                      visualDensity: VisualDensity.compact,
-                      textStyle: WidgetStateProperty.all(
-                        const TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w800,
-                        ),
+                ),
+                SegmentedButton<_AuthMode>(
+                  showSelectedIcon: false,
+                  segments: const [
+                    ButtonSegment<_AuthMode>(
+                      value: _AuthMode.signIn,
+                      label: Text("로그인"),
+                    ),
+                    ButtonSegment<_AuthMode>(
+                      value: _AuthMode.signUp,
+                      label: Text("가입"),
+                    ),
+                  ],
+                  selected: {mode},
+                  onSelectionChanged: isSubmitting
+                      ? null
+                      : (selected) => onModeChanged(selected.single),
+                  style: ButtonStyle(
+                    visualDensity: VisualDensity.compact,
+                    backgroundColor: WidgetStateProperty.resolveWith(
+                      (states) => states.contains(WidgetState.selected)
+                          ? const Color(0xFFDAD3FF)
+                          : Colors.transparent,
+                    ),
+                    side: WidgetStateProperty.all(BorderSide.none),
+                    textStyle: WidgetStateProperty.all(
+                      const TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w800,
                       ),
                     ),
-                  ),
-                ],
-              ),
-              if (isSignUp) ...[
-                const SizedBox(height: 10),
-                const Text(
-                  '가입 후 바로 시작할 수 있어요.',
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w700,
-                    color: Color(0xFF526079),
                   ),
                 ),
               ],
-              const SizedBox(height: 18),
-              _AuthTextField(
-                controller: emailController,
-                label: '이메일',
-                hintText: 'name@example.com',
-                icon: Icons.mail_outline_rounded,
-                keyboardType: TextInputType.emailAddress,
-                textInputAction: TextInputAction.next,
-                autofillHints: const [AutofillHints.email],
-                validator: _validateEmail,
+            ),
+            if (isSignUp) ...[
+              const SizedBox(height: 10),
+              const Text(
+                "가입 후 바로 시작할 수 있어요.",
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                  color: Color(0xFF526079),
+                ),
               ),
+            ],
+            const SizedBox(height: 18),
+            _AuthTextField(
+              controller: emailController,
+              hintText: "name@example.com",
+              icon: Icons.mail_outline_rounded,
+              keyboardType: TextInputType.emailAddress,
+              textInputAction: TextInputAction.next,
+              autofillHints: const [AutofillHints.email],
+              validator: _validateEmail,
+            ),
+            const SizedBox(height: 14),
+            _AuthTextField(
+              controller: passwordController,
+              hintText: "비밀번호 입력",
+              icon: Icons.lock_outline_rounded,
+              obscureText: !isPasswordVisible,
+              textInputAction: TextInputAction.done,
+              autofillHints: const [AutofillHints.password],
+              validator: (value) => _validatePassword(value, mode),
+              onFieldSubmitted: (_) {
+                if (!isSubmitting) {
+                  onSubmit();
+                }
+              },
+              suffixIcon: IconButton(
+                tooltip: isPasswordVisible ? "비밀번호 숨기기" : "비밀번호 보기",
+                onPressed: onPasswordVisibilityToggle,
+                icon: Icon(
+                  isPasswordVisible
+                      ? Icons.visibility_off_outlined
+                      : Icons.visibility_outlined,
+                ),
+              ),
+            ),
+            if (errorMessage != null) ...[
               const SizedBox(height: 14),
-              _AuthTextField(
-                controller: passwordController,
-                label: '비밀번호',
-                hintText: '비밀번호 입력',
-                icon: Icons.lock_outline_rounded,
-                obscureText: !isPasswordVisible,
-                textInputAction: TextInputAction.done,
-                autofillHints: const [AutofillHints.password],
-                validator: (value) => _validatePassword(value, mode),
-                onFieldSubmitted: (_) {
-                  if (!isSubmitting) {
-                    onSubmit();
-                  }
-                },
-                suffixIcon: IconButton(
-                  tooltip: isPasswordVisible ? '비밀번호 숨기기' : '비밀번호 보기',
-                  onPressed: onPasswordVisibilityToggle,
-                  icon: Icon(
-                    isPasswordVisible
-                        ? Icons.visibility_off_outlined
-                        : Icons.visibility_outlined,
-                  ),
+              _LoginErrorBanner(message: errorMessage!),
+            ],
+            const SizedBox(height: 20),
+            neu.Neumorphic(
+              style: neu.NeumorphicStyle(
+                depth: isSubmitting ? 2 : 7,
+                intensity: 0.9,
+                surfaceIntensity: 0.2,
+                color: isSubmitting
+                    ? const Color(0xFFB9B5FF)
+                    : _loginPrimaryColor,
+                shadowDarkColor: const Color(0x66000000),
+                shadowLightColor: Colors.white,
+                boxShape: neu.NeumorphicBoxShape.roundRect(
+                  BorderRadius.circular(16),
                 ),
               ),
-              if (errorMessage != null) ...[
-                const SizedBox(height: 14),
-                _LoginErrorBanner(message: errorMessage!),
-              ],
-              const SizedBox(height: 20),
-              FilledButton.icon(
+              child: FilledButton.icon(
                 onPressed: isSubmitting ? null : onSubmit,
                 icon: AnimatedSwitcher(
                   duration: const Duration(milliseconds: 180),
                   child: isSubmitting
                       ? const SizedBox(
-                          key: ValueKey('loading'),
+                          key: ValueKey("loading"),
                           width: 18,
                           height: 18,
                           child: CircularProgressIndicator(
@@ -476,14 +482,15 @@ class _LoginFormCard extends StatelessWidget {
                 ),
                 label: Text(
                   isSubmitting
-                      ? (isSignUp ? '가입 중' : '로그인 중')
-                      : (isSignUp ? '회원가입' : '로그인'),
+                      ? (isSignUp ? "가입 중" : "로그인 중")
+                      : (isSignUp ? "회원가입" : "로그인"),
                 ),
                 style: FilledButton.styleFrom(
-                  backgroundColor: const Color(0xFF6F63FF),
+                  backgroundColor: Colors.transparent,
                   foregroundColor: Colors.white,
-                  disabledBackgroundColor: const Color(0xFFB9B5FF),
+                  disabledBackgroundColor: Colors.transparent,
                   disabledForegroundColor: Colors.white,
+                  shadowColor: Colors.transparent,
                   padding: const EdgeInsets.symmetric(vertical: 15),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(16),
@@ -494,26 +501,26 @@ class _LoginFormCard extends StatelessWidget {
                   ),
                 ),
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );
   }
 
   String? _validateEmail(String? value) {
-    final email = value?.trim() ?? '';
-    final isValid = RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(email);
+    final email = value?.trim() ?? "";
+    final isValid = RegExp(r"^[^@\s]+@[^@\s]+\.[^@\s]+$").hasMatch(email);
     if (!isValid) {
-      return '이메일 형식으로 입력해 주세요.';
+      return "이메일 형식으로 입력해 주세요.";
     }
     return null;
   }
 
   String? _validatePassword(String? value, _AuthMode mode) {
     final minLength = mode == _AuthMode.signUp ? 6 : 4;
-    if ((value ?? '').length < minLength) {
-      return '비밀번호는 $minLength자 이상 입력해 주세요.';
+    if ((value ?? "").length < minLength) {
+      return "비밀번호는 $minLength자 이상 입력해 주세요.";
     }
     return null;
   }
@@ -563,7 +570,6 @@ class _LoginErrorBanner extends StatelessWidget {
 class _AuthTextField extends StatelessWidget {
   const _AuthTextField({
     required this.controller,
-    required this.label,
     required this.hintText,
     required this.icon,
     this.keyboardType,
@@ -576,7 +582,6 @@ class _AuthTextField extends StatelessWidget {
   });
 
   final TextEditingController controller;
-  final String label;
   final String hintText;
   final IconData icon;
   final TextInputType? keyboardType;
@@ -589,40 +594,59 @@ class _AuthTextField extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return TextFormField(
-      controller: controller,
-      keyboardType: keyboardType,
-      textInputAction: textInputAction,
-      autofillHints: autofillHints,
-      obscureText: obscureText,
-      validator: validator,
-      onFieldSubmitted: onFieldSubmitted,
-      style: const TextStyle(
-        color: Color(0xFF1C2940),
-        fontWeight: FontWeight.w700,
+    return neu.Neumorphic(
+      style: neu.NeumorphicStyle(
+        depth: -4,
+        intensity: 0.78,
+        surfaceIntensity: 0.12,
+        color: _loginSurfaceColor,
+        shadowDarkColor: const Color(0xFFD4DDEB),
+        shadowLightColor: Colors.white,
+        boxShape: neu.NeumorphicBoxShape.roundRect(BorderRadius.circular(16)),
       ),
-      decoration: InputDecoration(
-        labelText: label,
-        hintText: hintText,
-        prefixIcon: Icon(icon),
-        suffixIcon: suffixIcon,
-        filled: true,
-        fillColor: const Color(0xFFF7FAFF),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(16),
-          borderSide: BorderSide.none,
+      child: TextFormField(
+        controller: controller,
+        keyboardType: keyboardType,
+        textInputAction: textInputAction,
+        autofillHints: autofillHints,
+        obscureText: obscureText,
+        validator: validator,
+        onFieldSubmitted: onFieldSubmitted,
+        style: const TextStyle(
+          color: Color(0xFF1C2940),
+          fontWeight: FontWeight.w700,
         ),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(16),
-          borderSide: const BorderSide(color: Color(0xFFE6ECF5)),
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(16),
-          borderSide: const BorderSide(color: Color(0xFF6F63FF), width: 1.4),
-        ),
-        errorBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(16),
-          borderSide: const BorderSide(color: Color(0xFFFF8B93), width: 1.2),
+        decoration: InputDecoration(
+          hintText: hintText,
+          prefixIcon: Icon(icon, color: _loginPrimaryColor),
+          suffixIcon: suffixIcon,
+          suffixIconColor: const Color(0xFF526079),
+          filled: true,
+          fillColor: _loginSurfaceColor,
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 16,
+            vertical: 14,
+          ),
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(16),
+            borderSide: BorderSide.none,
+          ),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(16),
+            borderSide: BorderSide.none,
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(16),
+            borderSide: BorderSide.none,
+          ),
+          errorBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(16),
+            borderSide: BorderSide.none,
+          ),
+          focusedErrorBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(16),
+            borderSide: BorderSide.none,
+          ),
         ),
       ),
     );
@@ -637,14 +661,26 @@ class _GuestStartButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return TextButton.icon(
-      onPressed: isEnabled ? onPressed : null,
-      icon: const Icon(Icons.person_outline_rounded),
-      label: const Text('게스트로 시작'),
-      style: TextButton.styleFrom(
-        foregroundColor: const Color(0xFF526079),
-        padding: const EdgeInsets.symmetric(vertical: 14),
-        textStyle: const TextStyle(fontSize: 15, fontWeight: FontWeight.w800),
+    return neu.Neumorphic(
+      style: neu.NeumorphicStyle(
+        depth: isEnabled ? 5 : 1,
+        intensity: 0.86,
+        surfaceIntensity: 0.16,
+        color: _loginSurfaceColor,
+        shadowDarkColor: const Color(0xFFD4DDEB),
+        shadowLightColor: Colors.white,
+        boxShape: neu.NeumorphicBoxShape.roundRect(BorderRadius.circular(16)),
+      ),
+      child: TextButton.icon(
+        onPressed: isEnabled ? onPressed : null,
+        icon: const Icon(Icons.person_outline_rounded),
+        label: const Text("게스트로 시작"),
+        style: TextButton.styleFrom(
+          foregroundColor: const Color(0xFF526079),
+          disabledForegroundColor: const Color(0xFF9AA3B2),
+          padding: const EdgeInsets.symmetric(vertical: 14),
+          textStyle: const TextStyle(fontSize: 15, fontWeight: FontWeight.w800),
+        ),
       ),
     );
   }
