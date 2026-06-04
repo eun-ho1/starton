@@ -7,6 +7,7 @@ from app.repositories.task_repository import SupabaseTaskRepository
 
 USER_ID = "00000000-0000-4000-8000-000000000001"
 TASK_ID = "00000000-0000-4000-8000-000000000002"
+ACTIVE_TASK_ID = "00000000-0000-4000-8000-000000000009"
 
 
 TASK_ROW = {
@@ -63,6 +64,7 @@ class FakeQuery:
         self.payload: dict[str, Any] | None = None
         self.filters: list[tuple[str, Any]] = []
         self.in_filters: list[tuple[str, list[Any]]] = []
+        self.order_by: tuple[str, bool] | None = None
 
     def select(self, columns: str) -> "FakeQuery":
         self.operation = "select"
@@ -84,7 +86,8 @@ class FakeQuery:
     def limit(self, count: int) -> "FakeQuery":
         return self
 
-    def order(self, column: str) -> "FakeQuery":
+    def order(self, column: str, desc: bool = False) -> "FakeQuery":
+        self.order_by = (column, desc)
         return self
 
     def execute(self) -> FakeResponse:
@@ -95,6 +98,7 @@ class FakeQuery:
                 "payload": self.payload,
                 "filters": self.filters,
                 "in_filters": self.in_filters,
+                "order_by": self.order_by,
             }
         )
         if self.table_name == "tasks" and self.operation == "update":
@@ -102,6 +106,15 @@ class FakeQuery:
         if self.table_name == "subtasks" and self.operation == "update":
             return FakeResponse([])
         if self.table_name == "tasks" and self.operation == "select":
+            if self.in_filters:
+                return FakeResponse([
+                    {
+                        **TASK_ROW,
+                        "id": ACTIVE_TASK_ID,
+                        "status": "todo",
+                        "completed_at": None,
+                    }
+                ])
             return FakeResponse([TASK_ROW])
         if self.table_name == "subtasks" and self.operation == "select":
             return FakeResponse([SUBTASK_ROW])
@@ -148,6 +161,30 @@ class TaskRepositoryTest(unittest.TestCase):
         )
         self.assertEqual(str(result.id), TASK_ID)
         self.assertEqual(result.subtasks[0].status, "done")
+
+
+    def test_list_active_filters_open_tasks_and_loads_children(self) -> None:
+        client = FakeClient()
+        repository = SupabaseTaskRepository(client)
+
+        result = repository.list_active(user_id=USER_ID)
+
+        task_select = next(
+            call
+            for call in client.calls
+            if call["table"] == "tasks" and call["operation"] == "select"
+        )
+
+        self.assertEqual(task_select["filters"], [("user_id", USER_ID)])
+        self.assertEqual(
+            task_select["in_filters"],
+            [("status", ["todo", "doing", "paused"])],
+        )
+        self.assertEqual(task_select["order_by"], ("created_at", True))
+        self.assertEqual(len(result), 1)
+        self.assertEqual(str(result[0].id), ACTIVE_TASK_ID)
+        self.assertEqual(result[0].status, "todo")
+        self.assertEqual(result[0].subtasks[0].title, "Open file")
 
 
 if __name__ == "__main__":

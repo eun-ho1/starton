@@ -6,7 +6,7 @@ from app.repositories.base import CompletedQuestRepository, ProfileRepository, Q
 from app.repositories.raw_input_repository import SupabaseRawInputRepository
 from app.repositories.task_repository import SupabaseTaskRepository
 from app.schemas.quest import CompletedQuestRecordSchema
-from app.schemas.task import TaskStatus
+from app.schemas.task import TaskResponse, TaskStatus
 from app.services.progression_service import (
     apply_category_stats,
     apply_exp,
@@ -46,6 +46,15 @@ class TaskService:
         self._completed_quest_repository = completed_quest_repository
         self._profile_repository = profile_repository
         self._stats_repository = stats_repository
+
+    def list_active_tasks(self, *, user_id: str) -> list[TaskResponse]:
+        try:
+            return self._task_repository.list_active(user_id=user_id)
+        except Exception as error:
+            raise TaskServiceError(
+                "task_list_failed",
+                "Failed to load tasks for the current user.",
+            ) from error
 
     def complete_task(
         self,

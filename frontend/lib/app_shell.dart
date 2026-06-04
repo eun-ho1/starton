@@ -7,6 +7,7 @@ import 'package:start_on/models/profile_api_models.dart';
 import 'package:start_on/models/quest_api_models.dart';
 import 'package:start_on/models/stats_api_models.dart';
 import 'package:start_on/models/task_intake_api_models.dart';
+import 'package:start_on/models/task_quest_mapper.dart';
 import 'package:start_on/pages/add_quest_screen.dart';
 import 'package:start_on/pages/home_screen.dart';
 import 'package:start_on/pages/login_screen.dart';
@@ -841,7 +842,7 @@ class _AdFocusShellState extends State<AdFocusShell>
           selectedReminderIds: result.selectedReminderIds,
         ),
       );
-      return _questFromCommittedTask(commitResult.task, fallbackDraft: draft);
+      return questItemFromTaskResponse(commitResult.task, fallbackDraft: draft);
     } catch (error) {
       _showQuestSyncError('AI 제안을 저장하지 못했어요.', error);
       return null;
@@ -1494,6 +1495,7 @@ class _AdFocusShellState extends State<AdFocusShell>
     final statsRepository = _statsRepository;
     final dungeonRepository = _dungeonRepository;
     final leaderboardRepository = _leaderboardRepository;
+    final taskIntakeRepository = _taskIntakeRepository;
     if (profileRepository == null ||
         questRepository == null ||
         statsRepository == null ||
@@ -1505,6 +1507,9 @@ class _AdFocusShellState extends State<AdFocusShell>
     try {
       final profileFuture = profileRepository.getProfile();
       final questsFuture = questRepository.listQuests();
+      final tasksFuture = taskIntakeRepository == null
+          ? Future.value(<TaskResponse>[])
+          : _loadTaskListForInitialData(taskIntakeRepository);
       final statsFuture = statsRepository.getSummary();
       final dungeonsFuture = dungeonRepository.listDungeons();
       final leaderboardFuture = leaderboardRepository.getLeaderboard();
@@ -1512,6 +1517,7 @@ class _AdFocusShellState extends State<AdFocusShell>
       await Future.wait<Object>([
         profileFuture,
         questsFuture,
+        tasksFuture,
         statsFuture,
         dungeonsFuture,
         leaderboardFuture,
@@ -1523,6 +1529,7 @@ class _AdFocusShellState extends State<AdFocusShell>
         fallbackData,
         profile: await profileFuture,
         quests: await questsFuture,
+        tasks: await tasksFuture,
         stats: await statsFuture,
         dungeonList: dungeonList,
       );
@@ -1534,6 +1541,17 @@ class _AdFocusShellState extends State<AdFocusShell>
         _scheduleQuestSyncError('서버 초기 데이터를 불러오지 못해 저장된 데이터를 표시합니다.', error);
       }
       return fallbackData;
+    }
+  }
+
+  Future<List<TaskResponse>> _loadTaskListForInitialData(
+    TaskIntakeRepository repository,
+  ) async {
+    try {
+      return await repository.listTasks();
+    } catch (error) {
+      _logQuestSyncError('서버 task 목록을 불러오지 못해 기존 퀘스트 목록만 표시합니다.', error);
+      return const <TaskResponse>[];
     }
   }
 
@@ -1589,9 +1607,22 @@ class _AdFocusShellState extends State<AdFocusShell>
     AppLocalData data, {
     required ProfileResponse profile,
     required List<QuestItemResponse> quests,
+    required List<TaskResponse> tasks,
     required StatsSummaryResponse stats,
     required DungeonListResponse dungeonList,
   }) {
+    final localQuestsById = {for (final quest in data.quests) quest.id: quest};
+    final serverQuestItems = quests.map(QuestItem.fromApiResponse).toList();
+    final serverTaskItems = tasks
+        .map(
+          (task) => questItemFromTaskResponse(
+            task,
+            fallbackDraft:
+                localQuestsById[task.id] ?? _fallbackQuestForTask(task),
+          ),
+        )
+        .toList();
+
     return _applyServerProgressData(
       data,
       profile: profile,
@@ -1599,7 +1630,7 @@ class _AdFocusShellState extends State<AdFocusShell>
       dungeonList: dungeonList,
     ).copyWith(
       quests: _mergeServerQuestsWithLocalOnlyItems(
-        serverQuests: quests.map(QuestItem.fromApiResponse).toList(),
+        serverQuests: [...serverQuestItems, ...serverTaskItems],
         localQuests: data.quests,
       ),
     );
@@ -1660,13 +1691,150 @@ class _AdFocusShellState extends State<AdFocusShell>
     required List<QuestItem> serverQuests,
     required List<QuestItem> localQuests,
   }) {
-    final serverIds = serverQuests.map((quest) => quest.id).toSet();
+    final localQuestsById = {for (final quest in localQuests) quest.id: quest};
+    final serverIds = <String>{};
+    final mergedServerQuests = <QuestItem>[];
+
+    for (final serverQuest in serverQuests) {
+      if (!serverIds.add(serverQuest.id)) {
+        continue;
+      }
+      mergedServerQuests.add(
+        _mergeServerQuestWithLocalState(
+          serverQuest,
+          localQuestsById[serverQuest.id],
+        ),
+      );
+    }
+
     final localOnlyQuests = localQuests
         .where(
-          (quest) => !quest.syncsWithQuestApi && !serverIds.contains(quest.id),
+          (quest) =>
+              !quest.syncsWithQuestApi &&
+              !quest.isTaskBacked &&
+              !serverIds.contains(quest.id),
         )
         .toList();
-    return [...serverQuests, ...localOnlyQuests];
+    return [...mergedServerQuests, ...localOnlyQuests];
+  }
+
+  QuestItem _mergeServerQuestWithLocalState(
+    QuestItem serverQuest,
+    QuestItem? localQuest,
+  ) {
+    if (localQuest == null) {
+      return serverQuest;
+    }
+
+    final mergedSubtasks = _mergeServerSubtasksWithLocalState(
+      serverQuest.subtasks,
+      localQuest.subtasks,
+    );
+
+    return serverQuest.copyWith(
+      elapsedSeconds: localQuest.elapsedSeconds > serverQuest.elapsedSeconds
+          ? localQuest.elapsedSeconds
+          : serverQuest.elapsedSeconds,
+      subtasks: mergedSubtasks,
+      activeSubtaskId: _mergedActiveSubtaskId(
+        serverQuest: serverQuest,
+        localQuest: localQuest,
+        mergedSubtasks: mergedSubtasks,
+      ),
+      aiSubtaskPrompt: localQuest.aiSubtaskPrompt,
+    );
+  }
+
+  List<QuestSubtask> _mergeServerSubtasksWithLocalState(
+    List<QuestSubtask> serverSubtasks,
+    List<QuestSubtask> localSubtasks,
+  ) {
+    if (serverSubtasks.isEmpty) {
+      return localSubtasks;
+    }
+
+    final localSubtasksById = {
+      for (final subtask in localSubtasks) subtask.id: subtask,
+    };
+
+    return serverSubtasks.map((serverSubtask) {
+      final localSubtask = localSubtasksById[serverSubtask.id];
+      if (localSubtask == null) {
+        return serverSubtask;
+      }
+      return _mergeServerSubtaskWithLocalState(serverSubtask, localSubtask);
+    }).toList();
+  }
+
+  QuestSubtask _mergeServerSubtaskWithLocalState(
+    QuestSubtask serverSubtask,
+    QuestSubtask localSubtask,
+  ) {
+    final elapsedSeconds =
+        localSubtask.elapsedSeconds > serverSubtask.elapsedSeconds
+        ? localSubtask.elapsedSeconds
+        : serverSubtask.elapsedSeconds;
+    final useLocalStatus =
+        !serverSubtask.isDone &&
+        (localSubtask.isDone ||
+            localSubtask.elapsedSeconds > serverSubtask.elapsedSeconds);
+
+    return serverSubtask.copyWith(
+      status: useLocalStatus ? localSubtask.status : serverSubtask.status,
+      completedAt: serverSubtask.completedAt ?? localSubtask.completedAt,
+      elapsedSeconds: elapsedSeconds,
+    );
+  }
+
+  String? _mergedActiveSubtaskId({
+    required QuestItem serverQuest,
+    required QuestItem localQuest,
+    required List<QuestSubtask> mergedSubtasks,
+  }) {
+    for (final candidate in [
+      localQuest.activeSubtaskId,
+      serverQuest.activeSubtaskId,
+    ]) {
+      if (_isValidActiveSubtaskId(mergedSubtasks, candidate)) {
+        return candidate;
+      }
+    }
+
+    for (final subtask in mergedSubtasks) {
+      if (!subtask.isDone) {
+        return subtask.id;
+      }
+    }
+    return null;
+  }
+
+  bool _isValidActiveSubtaskId(
+    List<QuestSubtask> subtasks,
+    String? activeSubtaskId,
+  ) {
+    if (activeSubtaskId == null) {
+      return false;
+    }
+    for (final subtask in subtasks) {
+      if (subtask.id == activeSubtaskId && !subtask.isDone) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  QuestItem _fallbackQuestForTask(TaskResponse task) {
+    return QuestItem(
+      id: task.id,
+      title: task.title,
+      exp: 0,
+      difficulty: '보통',
+      category: 'work',
+      elapsedSeconds: 0,
+      defaultDurationSeconds: 0,
+      dueDate: task.dueAt,
+      syncTarget: questSyncTargetTask,
+    );
   }
 
   Future<QuestItem?> _createQuest(QuestItem quest) async {
@@ -1684,126 +1852,6 @@ class _AdFocusShellState extends State<AdFocusShell>
       _showQuestSyncError('퀘스트를 서버에 저장하지 못했어요.', error);
       return null;
     }
-  }
-
-  QuestItem _questFromCommittedTask(
-    TaskResponse task, {
-    required QuestItem fallbackDraft,
-  }) {
-    final difficulty = _questDifficultyFromTask(task.difficulty);
-    final category = _metadataString(task.metadata, 'category');
-
-    return QuestItem(
-      id: task.id,
-      title: task.title,
-      exp: expForDifficulty(difficulty),
-      difficulty: difficulty,
-      category: normalizeQuestCategory(category ?? fallbackDraft.category),
-      elapsedSeconds: 0,
-      defaultDurationSeconds: _taskDurationSeconds(
-        task,
-        difficulty: difficulty,
-        fallbackDraft: fallbackDraft,
-      ),
-      dueDate: normalizeQuestDueDate(task.dueAt ?? fallbackDraft.dueDate),
-      subtasks: _questSubtasksFromTask(task.subtasks),
-      activeSubtaskId: _firstIncompleteTaskSubtaskId(task.subtasks),
-      syncTarget: questSyncTargetTask,
-    );
-  }
-
-  List<QuestSubtask> _questSubtasksFromTask(List<SubtaskResponse> subtasks) {
-    final sortedSubtasks = [...subtasks]
-      ..sort((a, b) => a.orderIndex.compareTo(b.orderIndex));
-
-    return sortedSubtasks
-        .map(
-          (subtask) => QuestSubtask(
-            id: subtask.id,
-            title: subtask.title,
-            orderIndex: subtask.orderIndex,
-            estimatedMinutes: subtask.estimatedMinutes,
-            status: subtask.status,
-            isNextAction: subtask.isNextAction,
-            energyRequired: subtask.energyRequired,
-            completedAt: subtask.completedAt,
-            elapsedSeconds: subtask.status == 'done'
-                ? _taskSubtaskDurationSeconds(subtask)
-                : 0,
-          ),
-        )
-        .toList();
-  }
-
-  int _taskSubtaskDurationSeconds(SubtaskResponse subtask) {
-    final estimatedMinutes = subtask.estimatedMinutes;
-    if (estimatedMinutes == null || estimatedMinutes <= 0) {
-      return 60;
-    }
-    return estimatedMinutes * 60;
-  }
-
-  String? _firstIncompleteTaskSubtaskId(List<SubtaskResponse> subtasks) {
-    final sortedSubtasks = [...subtasks]
-      ..sort((a, b) => a.orderIndex.compareTo(b.orderIndex));
-
-    for (final subtask in sortedSubtasks) {
-      if (subtask.status != 'done') {
-        return subtask.id;
-      }
-    }
-    return null;
-  }
-
-  String _questDifficultyFromTask(String? difficulty) {
-    return switch (difficulty) {
-      'low' || 'easy' || '쉬움' => '쉬움',
-      'high' || 'hard' || '어려움' => '어려움',
-      _ => '보통',
-    };
-  }
-
-  int _taskDurationSeconds(
-    TaskResponse task, {
-    required String difficulty,
-    required QuestItem fallbackDraft,
-  }) {
-    final estimatedMinutes = task.estimatedMinutes;
-    if (estimatedMinutes != null && estimatedMinutes > 0) {
-      return estimatedMinutes * 60;
-    }
-
-    final metadataDuration = _metadataInt(
-      task.metadata,
-      'default_duration_seconds',
-    );
-    if (metadataDuration != null && metadataDuration > 0) {
-      return metadataDuration;
-    }
-
-    if (fallbackDraft.defaultDurationSeconds > 0) {
-      return fallbackDraft.defaultDurationSeconds;
-    }
-    return defaultQuestDurationSecondsForDifficulty(difficulty);
-  }
-
-  String? _metadataString(Map<String, dynamic> metadata, String key) {
-    final value = metadata[key];
-    if (value is String && value.trim().isNotEmpty) {
-      return value;
-    }
-    return null;
-  }
-
-  int? _metadataInt(Map<String, dynamic> metadata, String key) {
-    final value = metadata[key];
-    if (value is int) {
-      return value;
-    }
-    if (value is num) {
-      return value.toInt();
-    }
-    return null;
   }
 
   Future<void> _syncQuestUpdate(QuestItem quest) async {

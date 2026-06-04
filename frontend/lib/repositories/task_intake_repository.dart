@@ -25,6 +25,19 @@ class TaskIntakeRepository {
     );
   }
 
+  Future<List<TaskResponse>> listTasks() async {
+    final response = await _apiClient.getResponse<List<TaskResponse>>(
+      '/tasks',
+      parseData: _parseTaskList,
+    );
+
+    return _requireData(
+      response,
+      code: 'missing_task_list',
+      message: 'Server response did not include a task list.',
+    );
+  }
+
   Future<TaskCandidateResponse> getCandidate(String candidateId) async {
     final response = await _apiClient.getResponse<TaskCandidateResponse>(
       _candidatePath(candidateId),
@@ -115,6 +128,13 @@ class TaskIntakeRepository {
     if (_ownsApiClient) {
       _apiClient.close();
     }
+  }
+
+  List<TaskResponse> _parseTaskList(Object? json) {
+    if (json is! List) {
+      throw const FormatException('Task list must be a JSON array.');
+    }
+    return json.map(TaskResponse.fromJson).toList();
   }
 
   String _candidatePath(String candidateId) =>

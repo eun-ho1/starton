@@ -36,6 +36,39 @@ class SupabaseTaskRepository:
     def __init__(self, client: Any) -> None:
         self._client = client
 
+    def list_active(self, *, user_id: str) -> list[TaskResponse]:
+        response = (
+            self._client.table("tasks")
+            .select(_TASK_COLUMNS)
+            .eq("user_id", user_id)
+            .in_(
+                "status",
+                [
+                    TaskStatus.TODO.value,
+                    TaskStatus.DOING.value,
+                    TaskStatus.PAUSED.value,
+                ],
+            )
+            .order("created_at", desc=True)
+            .execute()
+        )
+        tasks: list[TaskResponse] = []
+        for task_row in response.data or []:
+            tasks.append(
+                _map_task_response(
+                    task_row,
+                    subtask_rows=self._list_subtasks(
+                        user_id=user_id,
+                        task_id=task_row["id"],
+                    ),
+                    reminder_rows=self._list_reminders(
+                        user_id=user_id,
+                        task_id=task_row["id"],
+                    ),
+                )
+            )
+        return tasks
+
     def get(self, *, user_id: str, task_id: str) -> TaskResponse:
         response = (
             self._client.table("tasks")
