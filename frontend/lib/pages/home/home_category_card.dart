@@ -31,6 +31,9 @@ class HomeCategoryCard extends StatelessWidget {
     final totalCount = completedCount + pendingCount;
     final progress = totalCount == 0 ? 0.0 : completedCount / totalCount;
     final progressLabel = '$completedCount/$totalCount';
+    final cardColor = totalCount == 0
+        ? backgroundColor.withValues(alpha: 0.46)
+        : backgroundColor;
 
     return SizedBox(
       height: 104,
@@ -42,7 +45,7 @@ class HomeCategoryCard extends StatelessWidget {
             intensity: 1,
             surfaceIntensity: 0.44,
             lightSource: neu.LightSource.topLeft,
-            color: backgroundColor,
+            color: cardColor,
             shadowLightColor: Colors.white,
             shadowDarkColor: const Color(0xFF6E7685).withValues(alpha: 0.54),
             boxShape: neu.NeumorphicBoxShape.roundRect(
@@ -78,6 +81,7 @@ class HomeCategoryCard extends StatelessWidget {
                       child: _CategoryProgressBadge(
                         progress: progress,
                         label: progressLabel,
+                        color: accentColor,
                       ),
                     ),
                   ],
@@ -92,10 +96,15 @@ class HomeCategoryCard extends StatelessWidget {
 }
 
 class _CategoryProgressBadge extends StatelessWidget {
-  const _CategoryProgressBadge({required this.progress, required this.label});
+  const _CategoryProgressBadge({
+    required this.progress,
+    required this.label,
+    required this.color,
+  });
 
   final double progress;
   final String label;
+  final Color color;
 
   @override
   Widget build(BuildContext context) {
@@ -107,7 +116,7 @@ class _CategoryProgressBadge extends StatelessWidget {
         children: [
           CustomPaint(
             size: const Size.square(58),
-            painter: _CategoryProgressPainter(progress: progress),
+            painter: _CategoryProgressPainter(progress: progress, color: color),
           ),
           Container(
             width: 39,
@@ -140,9 +149,10 @@ class _CategoryProgressBadge extends StatelessWidget {
 }
 
 class _CategoryProgressPainter extends CustomPainter {
-  const _CategoryProgressPainter({required this.progress});
+  const _CategoryProgressPainter({required this.progress, required this.color});
 
   final double progress;
+  final Color color;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -156,11 +166,11 @@ class _CategoryProgressPainter extends CustomPainter {
       ..strokeCap = StrokeCap.round
       ..strokeWidth = 5.5;
     final progressPaint = Paint()
-      ..color = const Color(0xFF6F63FF)
+      ..color = color
       ..style = PaintingStyle.stroke
       ..strokeCap = StrokeCap.round
       ..strokeWidth = 5.5;
-    final dotPaint = Paint()..color = const Color(0xFF5B9CFF);
+    final dotPaint = Paint()..color = color;
 
     canvas.drawCircle(center, radius, trackPaint);
     canvas.drawArc(
@@ -182,6 +192,6 @@ class _CategoryProgressPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _CategoryProgressPainter oldDelegate) {
-    return oldDelegate.progress != progress;
+    return oldDelegate.progress != progress || oldDelegate.color != color;
   }
 }

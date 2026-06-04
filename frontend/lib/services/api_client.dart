@@ -40,7 +40,8 @@ class ApiClient {
     defaultValue: '',
   );
 
-  static const String _androidEmulatorBaseUrl = 'http://10.0.2.2:8000/api/v1';
+  static const String _androidUsbReverseBaseUrl =
+      'http://127.0.0.1:8000/api/v1';
   static const String _localhostBaseUrl = 'http://127.0.0.1:8000/api/v1';
 
   final String baseUrl;
@@ -55,10 +56,10 @@ class ApiClient {
     }
 
     if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
-      // Android Emulator maps the host machine's localhost to 10.0.2.2,
-      // so a FastAPI server started with uvicorn --host 0.0.0.0 --port 8000
-      // is reachable there without depending on the host Wi-Fi IP address.
-      return _androidEmulatorBaseUrl;
+      // Physical Android devices connected over USB use adb reverse so the
+      // device's localhost:8000 reaches the development machine's backend.
+      // For an emulator, pass START_ON_API_BASE_URL=http://10.0.2.2:8000/api/v1.
+      return _androidUsbReverseBaseUrl;
     }
 
     return _localhostBaseUrl;

@@ -72,6 +72,8 @@ class _AddQuestScreenState extends State<AddQuestScreen> {
       return;
     }
 
+    _dueDate = _todayDueDate();
+
     final initialCategory = widget.initialCategory;
     if (initialCategory != null && questCategories.contains(initialCategory)) {
       _category = initialCategory;
@@ -203,7 +205,7 @@ class _AddQuestScreenState extends State<AddQuestScreen> {
                               Expanded(
                                 child: Text(
                                   _dueDate == null
-                                      ? ''
+                                      ? '마감일 없음'
                                       : formatQuestDueDate(_dueDate!),
                                   style: TextStyle(
                                     fontSize: 16,
@@ -226,9 +228,6 @@ class _AddQuestScreenState extends State<AddQuestScreen> {
                     const SizedBox(width: 12),
                     GestureDetector(
                       onTap: _pickDueDate,
-                      onLongPress: _dueDate == null
-                          ? null
-                          : () => setState(() => _dueDate = null),
                       child: neu.Neumorphic(
                         style: const neu.NeumorphicStyle(
                           depth: 6,
@@ -248,6 +247,11 @@ class _AddQuestScreenState extends State<AddQuestScreen> {
                       ),
                     ),
                   ],
+                ),
+                const SizedBox(height: 10),
+                _NoDueDateButton(
+                  selected: _dueDate == null,
+                  onTap: _clearDueDate,
                 ),
                 const SizedBox(height: 14),
                 const _DialogSectionLabel('Level'),
@@ -449,13 +453,8 @@ class _AddQuestScreenState extends State<AddQuestScreen> {
   }
 
   Future<void> _handleAiSuggestionTap() async {
-    final shouldContinue = await _showAiPromptSelectionDialog();
-    if (!mounted || !shouldContinue) {
-      return;
-    }
-
-    if (!widget.returnAiSuggestionRequest) {
-      _submit();
+    final selection = await _openAiPromptSelectionPage();
+    if (!mounted || selection == null) {
       return;
     }
 
@@ -463,88 +462,24 @@ class _AddQuestScreenState extends State<AddQuestScreen> {
     if (draft == null) {
       return;
     }
-
-    Navigator.of(context).pop(AddQuestScreenAiSuggestionRequest(draft));
-  }
-
-  Future<bool> _showAiPromptSelectionDialog() async {
-    const promptOptions = [
-      _AiPromptOption(
-        title: '작게 쪼개기',
-        description: '퀘스트를 바로 실행 가능한 작은 단계로 나눠요.',
-        icon: Icons.account_tree_rounded,
-      ),
-      _AiPromptOption(
-        title: '집중 루틴',
-        description: '시간 배분과 순서를 정리한 집중형 플랜을 만들어요.',
-        icon: Icons.timer_outlined,
-      ),
-      _AiPromptOption(
-        title: '빠른 실행',
-        description: '핵심 작업만 추려 짧고 단순한 제안을 만들어요.',
-        icon: Icons.flash_on_rounded,
-      ),
-    ];
-
-    var selectedIndex = 0;
-    final selected = await showDialog<int>(
-      context: context,
-      builder: (dialogContext) {
-        return StatefulBuilder(
-          builder: (context, setDialogState) {
-            return AlertDialog(
-              backgroundColor: _dialogColor,
-              surfaceTintColor: Colors.transparent,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(24),
-              ),
-              titlePadding: const EdgeInsets.fromLTRB(22, 22, 22, 0),
-              contentPadding: const EdgeInsets.fromLTRB(18, 16, 18, 6),
-              actionsPadding: const EdgeInsets.fromLTRB(18, 0, 18, 16),
-              title: const Text(
-                'AI 프롬프트 선택',
-                style: TextStyle(
-                  fontSize: 19,
-                  fontWeight: FontWeight.w900,
-                  color: _AddQuestScreenState._titleColor,
-                ),
-              ),
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  for (
-                    var index = 0;
-                    index < promptOptions.length;
-                    index++
-                  ) ...[
-                    _AiPromptOptionTile(
-                      option: promptOptions[index],
-                      selected: selectedIndex == index,
-                      onTap: () => setDialogState(() => selectedIndex = index),
-                    ),
-                    if (index != promptOptions.length - 1)
-                      const SizedBox(height: 10),
-                  ],
-                ],
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.of(dialogContext).pop(),
-                  child: const Text('취소'),
-                ),
-                TextButton(
-                  onPressed: () =>
-                      Navigator.of(dialogContext).pop(selectedIndex),
-                  child: const Text('다음'),
-                ),
-              ],
-            );
-          },
-        );
-      },
+    final aiDraft = draft.copyWith(
+      aiSubtaskPrompt: selection.promptInstruction,
     );
 
-    return selected != null;
+    if (!widget.returnAiSuggestionRequest) {
+      Navigator.of(context).pop(aiDraft);
+      return;
+    }
+
+    Navigator.of(context).pop(AddQuestScreenAiSuggestionRequest(aiDraft));
+  }
+
+  Future<_AiPromptSelection?> _openAiPromptSelectionPage() {
+    return Navigator.of(context).push<_AiPromptSelection>(
+      MaterialPageRoute<_AiPromptSelection>(
+        builder: (_) => const _AiPromptSelectionPage(),
+      ),
+    );
   }
 
   void _submit() {
@@ -696,6 +631,12 @@ class _AddQuestScreenState extends State<AddQuestScreen> {
     return subtasks.first.id;
   }
 
+  void _clearDueDate() {
+    setState(() => _dueDate = null);
+  }
+
+  DateTime _todayDueDate() => normalizeQuestDueDate(DateTime.now())!;
+
   Future<void> _pickDueDate() async {
     final now = DateTime.now();
     final picked = await showDatePicker(
@@ -742,37 +683,89 @@ class _DialogSectionLabel extends StatelessWidget {
 }
 
 class _InsetFieldShell extends StatelessWidget {
-  const _InsetFieldShell({
-    required this.child,
-    this.height = 48,
-    this.padding = const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-    this.onTap,
-  });
+  const _InsetFieldShell({required this.child});
 
   final Widget child;
-  final double height;
-  final EdgeInsets padding;
-  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    const padding = EdgeInsets.symmetric(horizontal: 16, vertical: 14);
+
+    return neu.Neumorphic(
+      style: neu.NeumorphicStyle(
+        depth: -4,
+        intensity: 0.8,
+        surfaceIntensity: 0.12,
+        color: _AddQuestScreenState._dialogColor,
+        shadowDarkColor: Color(0x18000000),
+        shadowLightColor: Color(0xFFFFFFFF),
+        boxShape: neu.NeumorphicBoxShape.roundRect(
+          BorderRadius.all(Radius.circular(16)),
+        ),
+      ),
+      padding: padding,
+      child: SizedBox(height: 48 - padding.vertical, child: child),
+    );
+  }
+}
+
+class _NoDueDateButton extends StatelessWidget {
+  const _NoDueDateButton({required this.selected, required this.onTap});
+
+  final bool selected;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
+      key: const Key('add_quest.no_due_date_button'),
       onTap: onTap,
-      behavior: HitTestBehavior.translucent,
-      child: neu.Neumorphic(
-        style: neu.NeumorphicStyle(
-          depth: -4,
-          intensity: 0.8,
-          surfaceIntensity: 0.12,
-          color: _AddQuestScreenState._dialogColor,
-          shadowDarkColor: Color(0x18000000),
-          shadowLightColor: Color(0xFFFFFFFF),
-          boxShape: neu.NeumorphicBoxShape.roundRect(
-            BorderRadius.all(Radius.circular(16)),
+      child: SizedBox(
+        height: 44,
+        child: neu.Neumorphic(
+          style: neu.NeumorphicStyle(
+            depth: selected ? -3.5 : 5,
+            intensity: selected ? 0.8 : 0.95,
+            surfaceIntensity: selected ? 0.12 : 0.2,
+            color: selected
+                ? const Color(0xFFE7E3FF)
+                : _AddQuestScreenState._dialogColor,
+            shadowDarkColor: selected
+                ? const Color(0x18000000)
+                : const Color(0x33000000),
+            shadowLightColor: Colors.white,
+            boxShape: neu.NeumorphicBoxShape.roundRect(
+              BorderRadius.circular(14),
+            ),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                Icons.event_busy_rounded,
+                size: 18,
+                color: selected
+                    ? const Color(0xFF6F63FF)
+                    : const Color(0xFF5F6673),
+              ),
+              const SizedBox(width: 7),
+              Flexible(
+                child: Text(
+                  '마감일 없음',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: selected
+                        ? const Color(0xFF252B3A)
+                        : const Color(0xFF5F6673),
+                    fontSize: 14,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
+            ],
           ),
         ),
-        padding: padding,
-        child: SizedBox(height: height - padding.vertical, child: child),
       ),
     );
   }
@@ -844,16 +837,228 @@ class _SubtaskModeChip extends StatelessWidget {
   }
 }
 
+const _aiPromptOptions = [
+  _AiPromptOption(
+    id: 'small_steps',
+    title: '작게 쪼개기',
+    description: '퀘스트를 바로 실행 가능한 작은 단계로 나눠요.',
+    instruction: '퀘스트를 바로 실행 가능한 작은 단계 중심으로 쪼갭니다.',
+    icon: Icons.account_tree_rounded,
+  ),
+  _AiPromptOption(
+    id: 'focus_routine',
+    title: '집중 루틴',
+    description: '시간 배분과 순서를 정리한 집중형 플랜을 만들어요.',
+    instruction: '집중 흐름에 맞춰 순서와 시간 배분을 함께 정리합니다.',
+    icon: Icons.timer_outlined,
+  ),
+  _AiPromptOption(
+    id: 'quick_action',
+    title: '빠른 실행',
+    description: '핵심 작업만 추려 짧고 단순한 제안을 만들어요.',
+    instruction: '핵심 작업만 남겨 짧고 단순한 실행 단계로 제안합니다.',
+    icon: Icons.flash_on_rounded,
+  ),
+];
+
+const _timeAllocationOptions = [
+  _TimeAllocationOption(
+    id: 'equal',
+    title: '시간배분 모두 똑같이',
+    description: '모든 subtask에 비슷한 시간을 배정해요.',
+    instruction: '모든 subtask에 시간을 균등하게 배분합니다.',
+    bars: [30, 30, 30],
+  ),
+  _TimeAllocationOption(
+    id: 'middle_peak',
+    title: '가운데에 시간이 가장 길게',
+    description: '시작과 끝은 짧게, 핵심 구간에 시간을 더 써요.',
+    instruction: '시작과 마무리는 짧게 잡고 가운데 핵심 subtask에 가장 긴 시간을 배분합니다.',
+    bars: [18, 40, 18],
+  ),
+  _TimeAllocationOption(
+    id: 'progressive',
+    title: '점점 시간을 많이 쓰기',
+    description: '뒤로 갈수록 더 긴 시간이 필요하게 배정해요.',
+    instruction: '초반 subtask는 짧게 시작하고 뒤로 갈수록 더 긴 시간을 배분합니다.',
+    bars: [16, 28, 42],
+  ),
+];
+
+class _AiPromptSelection {
+  const _AiPromptSelection({
+    required this.promptOption,
+    required this.timeAllocation,
+  });
+
+  final _AiPromptOption promptOption;
+  final _TimeAllocationOption timeAllocation;
+
+  String get promptInstruction {
+    return [
+      'subtask_prompt_mode=${promptOption.id}',
+      promptOption.instruction,
+      'time_allocation=${timeAllocation.id}',
+      timeAllocation.instruction,
+    ].join('\n');
+  }
+}
+
+class _AiPromptSelectionPage extends StatefulWidget {
+  const _AiPromptSelectionPage();
+
+  @override
+  State<_AiPromptSelectionPage> createState() => _AiPromptSelectionPageState();
+}
+
+class _AiPromptSelectionPageState extends State<_AiPromptSelectionPage> {
+  int _selectedPromptIndex = 0;
+  int _selectedTimeIndex = 0;
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: _AddQuestScreenState._dialogColor,
+      body: SafeArea(
+        child: ListView(
+          padding: const EdgeInsets.fromLTRB(24, 18, 24, 32),
+          children: [
+            Row(
+              children: [
+                SizedBox(
+                  width: 40,
+                  height: 40,
+                  child: IconButton(
+                    onPressed: () => Navigator.of(context).pop(),
+                    icon: const Icon(
+                      Icons.arrow_back_rounded,
+                      color: Color(0xFF2C2F36),
+                    ),
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(),
+                    visualDensity: VisualDensity.compact,
+                  ),
+                ),
+                const Expanded(
+                  child: Center(
+                    child: Text(
+                      'AI 프롬프트 선택',
+                      style: TextStyle(
+                        color: _AddQuestScreenState._titleColor,
+                        fontSize: 18,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 40, height: 40),
+              ],
+            ),
+            const SizedBox(height: 22),
+            const _DialogSectionLabel('쪼개기 선택'),
+            const SizedBox(height: 10),
+            for (
+              var index = 0;
+              index < _aiPromptOptions.length;
+              index += 1
+            ) ...[
+              _AiPromptOptionTile(
+                option: _aiPromptOptions[index],
+                selected: _selectedPromptIndex == index,
+                onTap: () => setState(() => _selectedPromptIndex = index),
+              ),
+              if (index != _aiPromptOptions.length - 1)
+                const SizedBox(height: 10),
+            ],
+            const SizedBox(height: 24),
+            const _DialogSectionLabel('Subtask 시간분배'),
+            const SizedBox(height: 10),
+            for (
+              var index = 0;
+              index < _timeAllocationOptions.length;
+              index += 1
+            ) ...[
+              _TimeAllocationOptionTile(
+                option: _timeAllocationOptions[index],
+                selected: _selectedTimeIndex == index,
+                onTap: () => setState(() => _selectedTimeIndex = index),
+              ),
+              if (index != _timeAllocationOptions.length - 1)
+                const SizedBox(height: 10),
+            ],
+            const SizedBox(height: 28),
+            GestureDetector(
+              onTap: () => Navigator.of(context).pop(
+                _AiPromptSelection(
+                  promptOption: _aiPromptOptions[_selectedPromptIndex],
+                  timeAllocation: _timeAllocationOptions[_selectedTimeIndex],
+                ),
+              ),
+              child: SizedBox(
+                width: double.infinity,
+                height: 56,
+                child: neu.Neumorphic(
+                  style: neu.NeumorphicStyle(
+                    depth: 6,
+                    intensity: 0.95,
+                    surfaceIntensity: 0.2,
+                    color: const Color(0xFF6B9AF5),
+                    shadowDarkColor: const Color(0x66000000),
+                    shadowLightColor: Colors.white,
+                    boxShape: neu.NeumorphicBoxShape.roundRect(
+                      BorderRadius.circular(28),
+                    ),
+                  ),
+                  child: const Center(
+                    child: Text(
+                      '다음',
+                      style: TextStyle(
+                        fontSize: 17,
+                        fontWeight: FontWeight.w800,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _AiPromptOption {
   const _AiPromptOption({
+    required this.id,
     required this.title,
     required this.description,
+    required this.instruction,
     required this.icon,
   });
 
+  final String id;
   final String title;
   final String description;
+  final String instruction;
   final IconData icon;
+}
+
+class _TimeAllocationOption {
+  const _TimeAllocationOption({
+    required this.id,
+    required this.title,
+    required this.description,
+    required this.instruction,
+    required this.bars,
+  });
+
+  final String id;
+  final String title;
+  final String description;
+  final String instruction;
+  final List<int> bars;
 }
 
 class _AiPromptOptionTile extends StatelessWidget {
@@ -928,6 +1133,120 @@ class _AiPromptOptionTile extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _TimeAllocationOptionTile extends StatelessWidget {
+  const _TimeAllocationOptionTile({
+    required this.option,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final _TimeAllocationOption option;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 160),
+        curve: Curves.easeOutCubic,
+        padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+        decoration: BoxDecoration(
+          color: selected ? const Color(0xFFE7E3FF) : const Color(0xFFF8FAFD),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: selected ? const Color(0xFF6F63FF) : const Color(0xFFE2E7F0),
+            width: selected ? 1.4 : 1,
+          ),
+        ),
+        child: Row(
+          children: [
+            _MiniTimeAllocationGraph(bars: option.bars, selected: selected),
+            const SizedBox(width: 13),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    option.title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: _AddQuestScreenState._titleColor,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                  const SizedBox(height: 3),
+                  Text(
+                    option.description,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: _AddQuestScreenState._labelColor,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      height: 1.25,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 10),
+            Icon(
+              selected ? Icons.radio_button_checked : Icons.radio_button_off,
+              size: 19,
+              color: selected
+                  ? const Color(0xFF6358FF)
+                  : _AddQuestScreenState._labelColor,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _MiniTimeAllocationGraph extends StatelessWidget {
+  const _MiniTimeAllocationGraph({required this.bars, required this.selected});
+
+  final List<int> bars;
+  final bool selected;
+
+  @override
+  Widget build(BuildContext context) {
+    final barColor = selected
+        ? const Color(0xFF6358FF)
+        : const Color(0xFF9AA2B1);
+
+    return SizedBox(
+      width: 52,
+      height: 46,
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          for (var index = 0; index < bars.length; index += 1) ...[
+            Expanded(
+              child: Align(
+                alignment: Alignment.bottomCenter,
+                child: Container(
+                  height: bars[index].toDouble(),
+                  decoration: BoxDecoration(
+                    color: barColor,
+                    borderRadius: BorderRadius.circular(7),
+                  ),
+                ),
+              ),
+            ),
+            if (index != bars.length - 1) const SizedBox(width: 5),
+          ],
+        ],
       ),
     );
   }

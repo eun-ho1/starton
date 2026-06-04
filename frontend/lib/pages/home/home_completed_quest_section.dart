@@ -10,27 +10,24 @@ class HomeCompletedQuestSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(right: 8),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            'Finished Quest',
-            style: TextStyle(
-              fontSize: 20,
-              fontWeight: FontWeight.w800,
-              color: Color(0xFF1C2940),
-            ),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          '완료된 퀘스트',
+          style: TextStyle(
+            fontSize: 20,
+            fontWeight: FontWeight.w800,
+            color: Color(0xFF1C2940),
           ),
-          const SizedBox(height: 12),
-          for (var index = 0; index < records.length; index++) ...[
-            HomeCompletedQuestCard(record: records[index]),
-            if (index != records.length - 1) const SizedBox(height: 12),
-          ],
-          const SizedBox(height: 8),
+        ),
+        const SizedBox(height: 12),
+        for (var index = 0; index < records.length; index++) ...[
+          HomeCompletedQuestCard(record: records[index]),
+          if (index != records.length - 1) const SizedBox(height: 12),
         ],
-      ),
+        const SizedBox(height: 8),
+      ],
     );
   }
 }

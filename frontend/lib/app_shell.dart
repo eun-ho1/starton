@@ -8,13 +8,13 @@ import 'package:start_on/models/quest_api_models.dart';
 import 'package:start_on/models/stats_api_models.dart';
 import 'package:start_on/models/task_intake_api_models.dart';
 import 'package:start_on/pages/add_quest_screen.dart';
-import 'package:start_on/pages/dungeon_screen.dart';
 import 'package:start_on/pages/home_screen.dart';
 import 'package:start_on/pages/login_screen.dart';
 import 'package:start_on/pages/quest_timer/quest_timer_bottom_sheet.dart';
 import 'package:start_on/pages/quest_timer_screen.dart';
 import 'package:start_on/pages/ranking_screen.dart';
 import 'package:start_on/pages/record_screen.dart';
+import 'package:start_on/pages/retry_screen.dart';
 import 'package:start_on/pages/settings_screen.dart';
 import 'package:start_on/pages/task_candidate_review_screen.dart';
 import 'package:start_on/repositories/auth_repository.dart';
@@ -29,6 +29,7 @@ import 'package:start_on/services/quest_timer_background_service.dart';
 import 'package:start_on/storage/app_settings_store.dart';
 import 'package:start_on/storage/auth_session_store.dart';
 import 'package:start_on/storage/local_data_store.dart';
+import 'package:start_on/widgets/ai_quest_creation_progress_overlay.dart';
 import 'package:start_on/widgets/common.dart';
 import 'package:start_on/widgets/quest_completion_celebration.dart';
 import 'package:flutter/material.dart';
@@ -317,7 +318,7 @@ class _AdFocusShellState extends State<AdFocusShell>
   bool _showQuestCelebration = false;
   int _questAutoAdvanceRemainingSeconds = 0;
   AppLocalData _localData = AppLocalData.initial();
-  List<DungeonStatusResponse> _serverDungeons = const [];
+  final Set<String> _skippedRetryQuestIds = <String>{};
   LeaderboardResponse? _leaderboard;
   Timer? _questAutoAdvanceTimer;
   String? _questAutoAdvanceQuestId;
@@ -460,10 +461,10 @@ class _AdFocusShellState extends State<AdFocusShell>
         onOpenSettings: _openSettings,
         onTabChange: _changeTab,
       ),
-      DungeonScreen(
-        dungeons: _visibleDungeons,
-        credits: _localData.credits,
-        onClearDungeon: _completeDungeon,
+      RetryScreen(
+        quests: _retryQuests,
+        onQuestStart: _openRetryQuest,
+        onSkipToday: _skipRetryToday,
       ),
       RankingScreen(data: _localData, leaderboard: _leaderboard),
       RecordScreen(data: _localData),
@@ -535,7 +536,7 @@ class _AdFocusShellState extends State<AdFocusShell>
   }
 
   Widget _buildAiQuestCreationOverlay() {
-    return const _AiQuestCreationProgressOverlay();
+    return const AiQuestCreationProgressOverlay();
   }
 
   void _changeTab(int index) {
@@ -560,17 +561,27 @@ class _AdFocusShellState extends State<AdFocusShell>
 
   Future<void> _openAddQuestScreen({String? initialCategory}) async {
     _cancelQuestAutoAdvance();
-    final quest = await Navigator.of(context).push<QuestItem>(
-      MaterialPageRoute<QuestItem>(
-        builder: (context) => AddQuestScreen(initialCategory: initialCategory),
+    final result = await Navigator.of(context).push<Object?>(
+      MaterialPageRoute<Object?>(
+        builder: (context) => AddQuestScreen(
+          initialCategory: initialCategory,
+          returnAiSuggestionRequest: true,
+        ),
       ),
     );
 
-    if (quest == null) {
+    if (result == null) {
       return;
     }
 
-    final createdQuest = await _createQuestFromDraft(quest);
+    final QuestItem? createdQuest;
+    if (result case AddQuestScreenAiSuggestionRequest request) {
+      createdQuest = await _createQuestFromAiSuggestion(request.draft);
+    } else if (result case QuestItem quest) {
+      createdQuest = await _createQuestFromDraft(quest);
+    } else {
+      return;
+    }
     if (!mounted || createdQuest == null) {
       return;
     }
@@ -588,6 +599,10 @@ class _AdFocusShellState extends State<AdFocusShell>
       );
     }
 
+    return _createQuest(draft);
+  }
+
+  Future<QuestItem?> _createQuestFromAiSuggestion(QuestItem draft) async {
     final taskIntakeRepository = _taskIntakeRepository;
     if (taskIntakeRepository == null) {
       return _createQuest(draft);
@@ -623,6 +638,7 @@ class _AdFocusShellState extends State<AdFocusShell>
   Future<QuestItem?> _handleQuestEditAiSuggestion({
     required QuestItem originalQuest,
     required QuestItem draft,
+    ValueChanged<bool>? onCreationLoadingChanged,
   }) async {
     final taskIntakeRepository = _taskIntakeRepository;
     if (taskIntakeRepository == null) {
@@ -633,6 +649,7 @@ class _AdFocusShellState extends State<AdFocusShell>
     if (mounted) {
       setState(() => _isCreatingAiQuest = true);
     }
+    onCreationLoadingChanged?.call(true);
 
     final TaskCandidateResponse? candidate;
     try {
@@ -644,6 +661,7 @@ class _AdFocusShellState extends State<AdFocusShell>
       if (mounted) {
         setState(() => _isCreatingAiQuest = false);
       }
+      onCreationLoadingChanged?.call(false);
     }
 
     if (!mounted || candidate == null) {
@@ -666,7 +684,6 @@ class _AdFocusShellState extends State<AdFocusShell>
       _replaceQuestById(_localData, originalQuest.id, updatedQuest),
     );
     unawaited(_deleteServerQuestAfterAiReplacement(originalQuest));
-    unawaited(_refreshDungeons());
     return updatedQuest;
   }
 
@@ -731,11 +748,7 @@ class _AdFocusShellState extends State<AdFocusShell>
   }
 
   String _taskIntakeTextFromDraft(QuestItem draft) {
-    final prompt = draft.aiSubtaskPrompt?.trim();
-    if (prompt == null || prompt.isEmpty) {
-      return draft.title;
-    }
-    return '${draft.title}\n\nSubtask request: $prompt';
+    return draft.title;
   }
 
   Future<QuestItem?> _reviewAndCommitCandidate(
@@ -904,7 +917,6 @@ class _AdFocusShellState extends State<AdFocusShell>
       MaterialPageRoute<Object?>(
         builder: (_) => QuestTimerScreen(
           quest: quest,
-          userLevel: _localData.level,
           notificationsEnabled: _notificationsEnabled,
           autoStartOnOpen: autoStartOnOpen,
           onQuestChanged: (updatedQuest) =>
@@ -1008,7 +1020,6 @@ class _AdFocusShellState extends State<AdFocusShell>
         quests: _localData.quests.where((item) => item.id != quest.id).toList(),
       ),
     );
-    unawaited(_refreshDungeons());
   }
 
   void _updateQuest(
@@ -1023,51 +1034,21 @@ class _AdFocusShellState extends State<AdFocusShell>
     }
   }
 
-  void _completeDungeon(String dungeonId) {
-    unawaited(_completeDungeonAsync(dungeonId));
+  void _openRetryQuest(QuestItem quest) {
+    unawaited(_openQuestTimer(quest, autoStartOnOpen: true));
   }
 
-  Future<void> _completeDungeonAsync(String dungeonId) async {
-    final dungeonRepository = _dungeonRepository;
-    if (dungeonRepository != null) {
-      try {
-        final clearResult = await dungeonRepository.clearDungeon(dungeonId);
-        if (!mounted) {
-          return;
-        }
-        _setLocalData(
-          _localData.copyWith(
-            credits: clearResult.credits,
-            clearedDungeonIds: _withClearedDungeonId(
-              _localData.clearedDungeonIds,
-              clearResult.dungeonId,
-            ),
-          ),
-        );
-        unawaited(_refreshServerProgressData());
-        await _refreshDungeons();
-      } catch (error) {
-        _showQuestSyncError('던전 보상을 서버에 저장하지 못했어요.', error);
-      }
+  void _skipRetryToday() {
+    final skippedQuestIds = _retryQuests.map((quest) => quest.id).toSet();
+    if (skippedQuestIds.isEmpty) {
       return;
     }
 
-    final rewardTarget = _localData.completedQuests.where(
-      (item) => item.questId == dungeonId,
-    );
-    if (rewardTarget.isEmpty ||
-        _localData.clearedDungeonIds.contains(dungeonId)) {
-      return;
-    }
-
-    _setLocalData(
-      _store.completeDungeon(
-        _localData,
-        dungeonId: dungeonId,
-        creditReward: _creditRewardForQuestDifficulty(
-          rewardTarget.first.difficulty,
-        ),
-      ),
+    setState(() => _skippedRetryQuestIds.addAll(skippedQuestIds));
+    _showStyledSnackBar(
+      '오늘은 리도전 퀘스트를 건너뛰었어요.',
+      centerText: true,
+      compact: true,
     );
   }
 
@@ -1545,7 +1526,6 @@ class _AdFocusShellState extends State<AdFocusShell>
         stats: await statsFuture,
         dungeonList: dungeonList,
       );
-      _serverDungeons = dungeonList.dungeons;
       _leaderboard = leaderboard;
       await _store.save(data);
       return data;
@@ -1595,7 +1575,6 @@ class _AdFocusShellState extends State<AdFocusShell>
         dungeonList: dungeonList,
       );
 
-      _serverDungeons = dungeonList.dungeons;
       setState(() {
         _localData = nextData;
         _leaderboard = leaderboard;
@@ -1661,77 +1640,20 @@ class _AdFocusShellState extends State<AdFocusShell>
     );
   }
 
-  List<DungeonStatusResponse> get _visibleDungeons {
-    if (_usesServerData && _serverDungeons.isNotEmpty) {
-      return _serverDungeons;
-    }
-    return _buildLocalDungeonList();
-  }
-
-  List<DungeonStatusResponse> _buildLocalDungeonList() {
-    final dungeons = <DungeonStatusResponse>[];
-
-    for (final quest in _localData.quests) {
-      dungeons.add(
-        DungeonStatusResponse(
-          dungeonId: quest.id,
-          title: quest.title,
-          difficulty: questDifficultyToApi(quest.difficulty),
-          completed: false,
-          cleared: _localData.clearedDungeonIds.contains(quest.id),
-          canClaim: false,
-          creditReward: _creditRewardForQuestDifficulty(quest.difficulty),
-          clearedAt: null,
-        ),
-      );
-    }
-
-    for (final completedQuest in _localData.completedQuests) {
-      final isCleared = _localData.clearedDungeonIds.contains(
-        completedQuest.questId,
-      );
-      dungeons.add(
-        DungeonStatusResponse(
-          dungeonId: completedQuest.questId,
-          title: completedQuest.title,
-          difficulty: questDifficultyToApi(completedQuest.difficulty),
-          completed: true,
-          cleared: isCleared,
-          canClaim: !isCleared,
-          creditReward: _creditRewardForQuestDifficulty(
-            completedQuest.difficulty,
-          ),
-          clearedAt: null,
-        ),
-      );
-    }
-
-    return dungeons;
-  }
-
-  int _creditRewardForQuestDifficulty(String difficulty) {
-    return switch (normalizeQuestDifficulty(difficulty)) {
-      '?ъ?' => 8,
-      '?대젮?' => 16,
-      _ => 12,
-    };
-  }
-
-  Future<void> _refreshDungeons() async {
-    final dungeonRepository = _dungeonRepository;
-    if (dungeonRepository == null) {
-      return;
-    }
-
-    try {
-      final response = await dungeonRepository.listDungeons();
-      if (!mounted) {
-        return;
+  List<QuestItem> get _retryQuests {
+    return _localData.quests.where((quest) {
+      if (_skippedRetryQuestIds.contains(quest.id)) {
+        return false;
       }
-      setState(() => _serverDungeons = response.dungeons);
-    } catch (_) {
-      // Keep the current list if refresh fails.
-    }
+      if (quest.elapsedSeconds <= 0) {
+        return false;
+      }
+      final duration = quest.effectiveDurationSeconds;
+      if (duration <= 0) {
+        return false;
+      }
+      return quest.elapsedSeconds < duration;
+    }).toList();
   }
 
   List<QuestItem> _mergeServerQuestsWithLocalOnlyItems({
@@ -1757,7 +1679,6 @@ class _AdFocusShellState extends State<AdFocusShell>
       final createdQuest = await questRepository.createQuest(
         quest.toCreateRequest(),
       );
-      unawaited(_refreshDungeons());
       return QuestItem.fromApiResponse(createdQuest);
     } catch (error) {
       _showQuestSyncError('퀘스트를 서버에 저장하지 못했어요.', error);
@@ -1902,7 +1823,6 @@ class _AdFocusShellState extends State<AdFocusShell>
       _setLocalData(
         _replaceQuest(_localData, QuestItem.fromApiResponse(updatedQuest)),
       );
-      await _refreshDungeons();
     } catch (error) {
       _showQuestSyncError('퀘스트 변경사항을 서버에 저장하지 못했어요.', error);
     }
@@ -1950,7 +1870,6 @@ class _AdFocusShellState extends State<AdFocusShell>
           proofImagePath: completedRecord.proofImagePath,
         ),
       );
-      unawaited(_refreshDungeons());
       return CompletedQuestRecord.fromApiResponse(savedRecord);
     } catch (error) {
       _showQuestSyncError('퀘스트 완료를 서버에 저장하지 못했어요.', error);
@@ -2000,16 +1919,6 @@ class _AdFocusShellState extends State<AdFocusShell>
       }
     }
     return null;
-  }
-
-  List<String> _withClearedDungeonId(
-    List<String> clearedDungeonIds,
-    String dungeonId,
-  ) {
-    if (clearedDungeonIds.contains(dungeonId)) {
-      return clearedDungeonIds;
-    }
-    return [...clearedDungeonIds, dungeonId];
   }
 
   AppLocalData _replaceQuest(AppLocalData data, QuestItem updatedQuest) {
@@ -2186,112 +2095,6 @@ class _QuestAutoAdvanceOverlay extends StatelessWidget {
                     ),
                   ),
                 ],
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _AiQuestCreationProgressOverlay extends StatefulWidget {
-  const _AiQuestCreationProgressOverlay();
-
-  @override
-  State<_AiQuestCreationProgressOverlay> createState() =>
-      _AiQuestCreationProgressOverlayState();
-}
-
-class _AiQuestCreationProgressOverlayState
-    extends State<_AiQuestCreationProgressOverlay>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _progressController = AnimationController(
-    vsync: this,
-    duration: const Duration(seconds: 18),
-  )..forward();
-
-  @override
-  void dispose() {
-    _progressController.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Positioned.fill(
-      child: AbsorbPointer(
-        child: Container(
-          color: const Color(0x66171B2A),
-          alignment: Alignment.center,
-          padding: const EdgeInsets.symmetric(horizontal: 28),
-          child: DecoratedBox(
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(18),
-              boxShadow: const [
-                BoxShadow(
-                  color: Color(0x24171B2A),
-                  blurRadius: 28,
-                  offset: Offset(0, 14),
-                ),
-              ],
-            ),
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(24, 22, 24, 24),
-              child: AnimatedBuilder(
-                animation: _progressController,
-                builder: (context, child) {
-                  final progress =
-                      Curves.easeOutCubic.transform(_progressController.value) *
-                      0.9;
-                  final percent = (progress * 100).round().clamp(1, 90);
-                  return Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      const Text(
-                        'AI 퀘스트 생성 중...',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          color: Color(0xFF252B3A),
-                          fontSize: 16,
-                          fontWeight: FontWeight.w900,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      const Text(
-                        'AI 제안 페이지를 준비하고 있어요.',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          color: Color(0xFF7E899D),
-                          fontSize: 12,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                      const SizedBox(height: 18),
-                      ClipRRect(
-                        borderRadius: BorderRadius.circular(999),
-                        child: LinearProgressIndicator(
-                          value: progress,
-                          minHeight: 8,
-                          color: const Color(0xFF6F63FF),
-                          backgroundColor: const Color(0xFFE5E9F2),
-                        ),
-                      ),
-                      const SizedBox(height: 10),
-                      Text(
-                        '$percent%',
-                        textAlign: TextAlign.right,
-                        style: const TextStyle(
-                          color: Color(0xFF6F63FF),
-                          fontSize: 13,
-                          fontWeight: FontWeight.w900,
-                        ),
-                      ),
-                    ],
-                  );
-                },
               ),
             ),
           ),

@@ -15,7 +15,7 @@ class AppBottomNavBar extends StatelessWidget {
   Widget build(BuildContext context) {
     const items = [
       (Icons.home_outlined, '홈'),
-      (Icons.monitor_heart_outlined, '던전'),
+      (Icons.monitor_heart_outlined, '리도전'),
       (Icons.emoji_events_outlined, '랭킹'),
       (Icons.bar_chart_rounded, '기록'),
     ];

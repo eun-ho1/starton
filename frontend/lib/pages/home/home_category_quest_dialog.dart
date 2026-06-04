@@ -42,7 +42,7 @@ class HomeCategoryQuestDialog extends StatelessWidget {
                       neu.Neumorphic(
                         style: neu.NeumorphicStyle(
                           depth: 5,
-                          intensity: 0.88,
+                          intensity: 0.6,
                           surfaceIntensity: 0.24,
                           color: Color.alphaBlend(
                             style.accentColor.withValues(alpha: 0.08),
@@ -86,7 +86,7 @@ class HomeCategoryQuestDialog extends StatelessWidget {
                         child: neu.Neumorphic(
                           style: neu.NeumorphicStyle(
                             depth: 4,
-                            intensity: 0.84,
+                            intensity: 0.6,
                             surfaceIntensity: 0.18,
                             color: dialogBackgroundColor,
                             shadowLightColor: Colors.white,
@@ -109,21 +109,10 @@ class HomeCategoryQuestDialog extends StatelessWidget {
                         width: double.infinity,
                         child: Column(
                           children: [
-                            neu.Neumorphic(
-                              style: neu.NeumorphicStyle(
-                                depth: -4,
-                                intensity: 0.86,
-                                surfaceIntensity: 0.18,
-                                color: dialogBackgroundColor,
-                                shadowLightColor: Colors.white,
-                                boxShape: const neu.NeumorphicBoxShape.circle(),
-                              ),
-                              padding: const EdgeInsets.all(12),
-                              child: Icon(
-                                style.icon,
-                                color: style.accentColor.withValues(alpha: 0.8),
-                                size: 28,
-                              ),
+                            Icon(
+                              style.icon,
+                              color: style.accentColor.withValues(alpha: 0.8),
+                              size: 28,
                             ),
                             const SizedBox(height: 10),
                             Text(
@@ -135,15 +124,6 @@ class HomeCategoryQuestDialog extends StatelessWidget {
                               ),
                             ),
                             const SizedBox(height: 8),
-                            const Text(
-                              '아래 버튼으로 바로 새 퀘스트를 추가할 수 있어요.',
-                              textAlign: TextAlign.center,
-                              style: TextStyle(
-                                fontSize: 13,
-                                height: 1.5,
-                                color: Color(0xFF708096),
-                              ),
-                            ),
                           ],
                         ),
                       ),
@@ -195,7 +175,7 @@ class HomeCategoryQuestDialog extends StatelessWidget {
                     child: neu.Neumorphic(
                       style: neu.NeumorphicStyle(
                         depth: 6,
-                        intensity: 0.9,
+                        intensity: 0.6,
                         surfaceIntensity: 0.22,
                         color: style.accentColor,
                         shadowLightColor: Colors.white,
@@ -262,7 +242,7 @@ class _CategoryQuestTile extends StatelessWidget {
         child: neu.Neumorphic(
           style: neu.NeumorphicStyle(
             depth: 7,
-            intensity: 0.9,
+            intensity: 0.5,
             surfaceIntensity: 0.24,
             color: baseColor,
             shadowLightColor: Colors.white,
@@ -433,26 +413,12 @@ class _CategoryDialogMetaChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return neu.Neumorphic(
-      style: neu.NeumorphicStyle(
-        depth: -3,
-        intensity: 0.88,
-        surfaceIntensity: 0.18,
-        color: Color.alphaBlend(
-          accentColor.withValues(alpha: 0.08),
-          backgroundColor,
-        ),
-        shadowLightColor: Colors.white,
-        boxShape: neu.NeumorphicBoxShape.roundRect(BorderRadius.circular(999)),
-      ),
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-      child: Text(
-        label,
-        style: TextStyle(
-          fontSize: 12,
-          fontWeight: FontWeight.w700,
-          color: accentColor,
-        ),
+    return Text(
+      label,
+      style: TextStyle(
+        fontSize: 12,
+        fontWeight: FontWeight.w700,
+        color: accentColor,
       ),
     );
   }

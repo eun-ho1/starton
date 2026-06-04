@@ -12,6 +12,7 @@ import 'package:start_on/models/quest_api_models.dart';
 import 'package:start_on/models/quest_item.dart';
 import 'package:start_on/models/stats_api_models.dart';
 import 'package:start_on/models/task_intake_api_models.dart';
+import 'package:start_on/pages/add_quest_screen.dart';
 import 'package:start_on/repositories/auth_repository.dart';
 import 'package:start_on/repositories/dungeon_repository.dart';
 import 'package:start_on/repositories/profile_repository.dart';
@@ -21,6 +22,31 @@ import 'package:start_on/repositories/task_intake_repository.dart';
 import 'package:start_on/services/api_client.dart';
 
 void main() {
+  testWidgets('add quest defaults due date to today', (tester) async {
+    await _setTallTestSurface(tester);
+    final today = normalizeQuestDueDate(DateTime.now());
+
+    final result = await _submitAddQuestFromScreen(tester, title: '오늘 기본 마감');
+
+    expect(result, isA<QuestItem>());
+    expect((result as QuestItem).dueDate, today);
+  });
+
+  testWidgets('add quest no due date button saves null due date', (
+    tester,
+  ) async {
+    await _setTallTestSurface(tester);
+
+    final result = await _submitAddQuestFromScreen(
+      tester,
+      title: '마감 없는 퀘스트',
+      clearDueDate: true,
+    );
+
+    expect(result, isA<QuestItem>());
+    expect((result as QuestItem).dueDate, isNull);
+  });
+
   testWidgets('renders login screen first', (tester) async {
     SharedPreferences.setMockInitialValues({});
 
@@ -407,7 +433,24 @@ void main() {
     await tester.tap(find.text('AI 제안 페이지로 이동'));
     await tester.pumpAndSettle();
 
-    expect(taskIntakeRepository.createRequests.single.text, '컴비전 과제');
+    expect(find.text('AI 프롬프트 선택'), findsOneWidget);
+    expect(find.text('쪼개기 선택'), findsOneWidget);
+    expect(find.text('Subtask 시간분배'), findsOneWidget);
+    expect(find.text('시간배분 모두 똑같이'), findsOneWidget);
+
+    await tester.tap(find.text('다음'));
+    await tester.pumpAndSettle();
+
+    final createRequest = taskIntakeRepository.createRequests.single;
+    expect(createRequest.text, '컴비전 과제');
+    expect(
+      createRequest.clientMetadata['subtask_generation_prompt'],
+      contains('subtask_prompt_mode=small_steps'),
+    );
+    expect(
+      createRequest.clientMetadata['subtask_generation_prompt'],
+      contains('time_allocation=equal'),
+    );
     expect(find.text('AI 제안 확인'), findsOneWidget);
     expect(find.text('컴퓨터비전 과제 제출 준비'), findsOneWidget);
 
@@ -487,6 +530,47 @@ void main() {
     expect(subtaskAfterReopen['completedAt'], isNull);
     expect(subtaskAfterReopen['elapsedSeconds'], 0);
     expect(repositories.questRepository.updateCallCount, 0);
+  });
+
+  testWidgets('server add quest creates regular quest without AI candidate', (
+    tester,
+  ) async {
+    await _setTallTestSurface(tester);
+    SharedPreferences.setMockInitialValues({
+      'auth.is_signed_in': true,
+      'auth.user_id': 'user-1',
+      'auth.email': 'tester@starton.local',
+      'auth.display_name': 'Tester',
+      'auth.access_token': 'access-token',
+      'settings.notifications_enabled': false,
+    });
+    final taskIntakeRepository = _FakeTaskIntakeRepository();
+    final repositories = _FakeServerRepositories(
+      taskIntakeRepository: taskIntakeRepository,
+    );
+
+    await tester.pumpWidget(
+      AdFocusApp(
+        profileRepository: repositories.profileRepository,
+        questRepository: repositories.questRepository,
+        statsRepository: repositories.statsRepository,
+        dungeonRepository: repositories.dungeonRepository,
+        taskIntakeRepository: repositories.taskIntakeRepository,
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    await tester.tap(find.byIcon(Icons.add_rounded));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField).first, '일반 과제');
+    await tester.tap(find.text('Create task'));
+    await tester.pumpAndSettle();
+
+    expect(taskIntakeRepository.createRequests, isEmpty);
+    expect(repositories.questRepository.createRequests.single.title, '일반 과제');
+    expect(find.text('AI 제안 확인'), findsNothing);
+    expect(find.text('일반 과제'), findsOneWidget);
   });
 
   testWidgets('server add quest can save manually entered subtasks locally', (
@@ -593,6 +677,8 @@ void main() {
     await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextField).first, '컴비전 과제');
     await tester.tap(find.text('AI 제안 페이지로 이동'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('다음'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
 
@@ -654,7 +740,9 @@ void main() {
     await tester.tap(find.byIcon(Icons.add_rounded));
     await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextField).first, '컴비전 과제');
-    await tester.tap(find.text('Create task'));
+    await tester.tap(find.text('AI 제안 페이지로 이동'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('다음'));
     await tester.pumpAndSettle();
 
     await tester.tap(find.text('이대로 저장'));
@@ -710,7 +798,9 @@ void main() {
     await tester.tap(find.byIcon(Icons.add_rounded));
     await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextField).first, '취소할 과제');
-    await tester.tap(find.text('Create task'));
+    await tester.tap(find.text('AI 제안 페이지로 이동'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('다음'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('취소'));
     await tester.pumpAndSettle();
@@ -744,6 +834,46 @@ void main() {
     expect(find.text('AI 제안 확인'), findsNothing);
     expect(find.text('로컬 퀘스트'), findsOneWidget);
   });
+}
+
+Future<Object?> _submitAddQuestFromScreen(
+  WidgetTester tester, {
+  required String title,
+  bool clearDueDate = false,
+}) async {
+  Object? result;
+  await tester.pumpWidget(
+    MaterialApp(
+      home: Scaffold(
+        body: Builder(
+          builder: (context) {
+            return TextButton(
+              onPressed: () async {
+                result = await Navigator.of(context).push<Object>(
+                  MaterialPageRoute(builder: (_) => const AddQuestScreen()),
+                );
+              },
+              child: const Text('open add quest'),
+            );
+          },
+        ),
+      ),
+    ),
+  );
+
+  await tester.tap(find.text('open add quest'));
+  await tester.pumpAndSettle();
+
+  if (clearDueDate) {
+    await tester.tap(find.byKey(const Key('add_quest.no_due_date_button')));
+    await tester.pump();
+  }
+
+  await tester.enterText(find.byType(TextField).first, title);
+  await tester.tap(find.text('Create task'));
+  await tester.pumpAndSettle();
+
+  return result;
 }
 
 Future<void> _setTallTestSurface(WidgetTester tester) async {
@@ -870,6 +1000,7 @@ class _FakeQuestRepository extends QuestRepository {
       super(apiClient: _UnusedApiClient());
 
   final List<QuestItemResponse> quests;
+  final List<QuestCreateRequest> createRequests = [];
   int listCallCount = 0;
   int updateCallCount = 0;
 
@@ -877,6 +1008,21 @@ class _FakeQuestRepository extends QuestRepository {
   Future<List<QuestItemResponse>> listQuests() async {
     listCallCount += 1;
     return quests;
+  }
+
+  @override
+  Future<QuestItemResponse> createQuest(QuestCreateRequest request) async {
+    createRequests.add(request);
+    return QuestItemResponse(
+      id: 'created-quest',
+      title: request.title,
+      exp: request.exp,
+      difficulty: request.difficulty,
+      category: request.category,
+      elapsedSeconds: 0,
+      defaultDurationSeconds: request.defaultDurationSeconds,
+      dueAt: request.dueAt,
+    );
   }
 
   @override

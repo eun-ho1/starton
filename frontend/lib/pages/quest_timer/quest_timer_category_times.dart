@@ -76,6 +76,7 @@ class _CategoryTimeBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
+      key: ValueKey<String>('quest_timer.category_bar.${item.category}'),
       height: compact ? 30 : 38,
       padding: EdgeInsets.symmetric(horizontal: compact ? 11 : 20),
       decoration: BoxDecoration(
