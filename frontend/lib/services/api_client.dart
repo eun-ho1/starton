@@ -40,9 +40,8 @@ class ApiClient {
     defaultValue: '',
   );
 
-  static const String _androidUsbReverseBaseUrl =
-      'http://127.0.0.1:8000/api/v1';
-  static const String _localhostBaseUrl = 'http://127.0.0.1:8000/api/v1';
+  static const String _productionBaseUrl =
+      'https://starton.onrender.com/api/v1';
 
   final String baseUrl;
   final http.Client _httpClient;
@@ -55,14 +54,7 @@ class ApiClient {
       return _configuredBaseUrl;
     }
 
-    if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
-      // Physical Android devices connected over USB use adb reverse so the
-      // device's localhost:8000 reaches the development machine's backend.
-      // For an emulator, pass START_ON_API_BASE_URL=http://10.0.2.2:8000/api/v1.
-      return _androidUsbReverseBaseUrl;
-    }
-
-    return _localhostBaseUrl;
+    return _productionBaseUrl;
   }
 
   Future<dynamic> get(String path, {Map<String, String>? queryParameters}) {
