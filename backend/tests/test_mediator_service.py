@@ -21,6 +21,7 @@ from app.services.today_planning_service import (
     TodayContext,
     TodayPlanningService,
 )
+from app.services.user_task_pattern_service import UserTaskPatternAnalysis
 
 
 USER_ID = "00000000-0000-4000-8000-000000000001"
@@ -392,6 +393,45 @@ class FakeTodayContextRepository:
         return self.counts
 
 
+class FakeUserTaskPatternService:
+    def __init__(
+        self,
+        events: list[str],
+        *,
+        error: Exception | None = None,
+        analysis: UserTaskPatternAnalysis | None = None,
+    ) -> None:
+        self.events = events
+        self.error = error
+        self.analysis = analysis or UserTaskPatternAnalysis(
+            data_sufficient=True,
+            history_count=8,
+            completed_count=6,
+            existing_tasks=[
+                {
+                    "title": "미완료 업무 정리",
+                    "status": "todo",
+                    "estimated_minutes": 20,
+                    "subtask_count": 2,
+                }
+            ],
+            prompt_payload={
+                "data_sufficient": True,
+                "analysis_summary": "짧은 task와 작은 subtask 분해에서 완료율이 더 높습니다.",
+                "planning_biases": ["short_tasks_work_better"],
+                "metrics": {"completion_rate": 0.75},
+            },
+        )
+        self.calls: list[dict[str, object]] = []
+
+    def analyze(self, *, user_id: str) -> UserTaskPatternAnalysis:
+        self.events.append("patterns.analyze")
+        self.calls.append({"user_id": user_id})
+        if self.error is not None:
+            raise self.error
+        return self.analysis
+
+
 class MediatorServiceTest(unittest.TestCase):
     def make_service(
         self,
@@ -405,6 +445,7 @@ class MediatorServiceTest(unittest.TestCase):
         FakeTaskCandidateRepository,
         FakeGeminiProvider,
         FakeTodayPlanningService,
+        FakeUserTaskPatternService,
     ]:
         events: list[str] = []
         raw_input_repository = FakeRawInputRepository(events)
@@ -412,12 +453,14 @@ class MediatorServiceTest(unittest.TestCase):
         task_candidate_repository = FakeTaskCandidateRepository(events)
         gemini_provider = FakeGeminiProvider(events, error=gemini_error)
         today_planning_service = FakeTodayPlanningService(events)
+        user_task_pattern_service = FakeUserTaskPatternService(events)
         service = MediatorService(
             raw_input_repository=raw_input_repository,
             mediator_run_repository=mediator_run_repository,
             task_candidate_repository=task_candidate_repository,
             gemini_provider=gemini_provider,
             today_planning_service=today_planning_service,
+            user_task_pattern_service=user_task_pattern_service,
         )
         return (
             service,
@@ -427,6 +470,7 @@ class MediatorServiceTest(unittest.TestCase):
             task_candidate_repository,
             gemini_provider,
             today_planning_service,
+            user_task_pattern_service,
         )
 
     def test_create_candidate_records_successful_mvp1_flow(self) -> None:
@@ -438,6 +482,7 @@ class MediatorServiceTest(unittest.TestCase):
             task_candidate_repository,
             gemini_provider,
             today_planning_service,
+            user_task_pattern_service,
         ) = self.make_service()
 
         candidate = service.create_candidate(
@@ -454,6 +499,7 @@ class MediatorServiceTest(unittest.TestCase):
                 "raw.get",
                 "raw.status:processing",
                 "today.get",
+                "patterns.analyze",
                 "run.start",
                 "gemini.generate",
                 "today.guard",
@@ -471,14 +517,21 @@ class MediatorServiceTest(unittest.TestCase):
         self.assertEqual(start_call["model_name"], "fake-gemini")
         self.assertEqual(start_call["profile_id"], PROFILE_ID)
         self.assertEqual(start_call["input_context"]["raw_text"], "컴비전 과제 해야 함")
-        self.assertEqual(start_call["input_context"]["existing_tasks"], [])
-        self.assertEqual(start_call["input_context"]["user_patterns"], {})
+        self.assertEqual(len(start_call["input_context"]["existing_tasks"]), 1)
+        self.assertEqual(
+            start_call["input_context"]["user_patterns"]["planning_biases"],
+            ["short_tasks_work_better"],
+        )
 
         gemini_call = gemini_provider.calls[0]
         self.assertEqual(gemini_call["raw_text"], "컴비전 과제 해야 함")
         self.assertEqual(gemini_call["source"], TaskSource.MANUAL.value)
-        self.assertEqual(gemini_call["existing_tasks"], [])
-        self.assertEqual(gemini_call["user_patterns"], {})
+        self.assertEqual(len(gemini_call["existing_tasks"]), 1)
+        self.assertEqual(
+            gemini_call["user_patterns"]["analysis_summary"],
+            "짧은 task와 작은 subtask 분해에서 완료율이 더 높습니다.",
+        )
+        self.assertEqual(user_task_pattern_service.calls[0]["user_id"], USER_ID)
 
         create_call = task_candidate_repository.create_calls[0]
         self.assertEqual(create_call["mediator_run_id"], MEDIATOR_RUN_ID)
@@ -524,6 +577,7 @@ class MediatorServiceTest(unittest.TestCase):
             task_candidate_repository=task_candidate_repository,
             gemini_provider=gemini_provider,
             today_planning_service=TodayPlanningService(today_context_repository),
+            user_task_pattern_service=FakeUserTaskPatternService(events),
         )
 
         candidate = service.create_candidate(
@@ -561,6 +615,7 @@ class MediatorServiceTest(unittest.TestCase):
             task_candidate_repository,
             _gemini_provider,
             _today_planning_service,
+            _user_task_pattern_service,
         ) = self.make_service(gemini_error=RuntimeError("gemini unavailable"))
 
         with self.assertRaisesRegex(RuntimeError, "gemini unavailable"):
@@ -572,6 +627,7 @@ class MediatorServiceTest(unittest.TestCase):
                 "raw.get",
                 "raw.status:processing",
                 "today.get",
+                "patterns.analyze",
                 "run.start",
                 "gemini.generate",
                 "run.failed",
@@ -589,6 +645,37 @@ class MediatorServiceTest(unittest.TestCase):
             raw_input_repository.status_updates[-1]["error_message"],
             "gemini unavailable",
         )
+
+    def test_create_candidate_falls_back_when_pattern_analysis_fails(self) -> None:
+        events: list[str] = []
+        raw_input_repository = FakeRawInputRepository(events)
+        mediator_run_repository = FakeMediatorRunRepository(events)
+        task_candidate_repository = FakeTaskCandidateRepository(events)
+        gemini_provider = FakeGeminiProvider(events)
+        today_planning_service = FakeTodayPlanningService(events)
+        user_task_pattern_service = FakeUserTaskPatternService(
+            events,
+            error=RuntimeError("pattern lookup unavailable"),
+        )
+        service = MediatorService(
+            raw_input_repository=raw_input_repository,
+            mediator_run_repository=mediator_run_repository,
+            task_candidate_repository=task_candidate_repository,
+            gemini_provider=gemini_provider,
+            today_planning_service=today_planning_service,
+            user_task_pattern_service=user_task_pattern_service,
+        )
+
+        service.create_candidate(user_id=USER_ID, raw_input_id=RAW_INPUT_ID)
+
+        self.assertIn("patterns.analyze", events)
+        start_call = mediator_run_repository.start_calls[0]
+        self.assertEqual(start_call["input_context"]["existing_tasks"], [])
+        self.assertEqual(start_call["input_context"]["user_patterns"], {})
+
+        gemini_call = gemini_provider.calls[0]
+        self.assertEqual(gemini_call["existing_tasks"], [])
+        self.assertEqual(gemini_call["user_patterns"], {})
 
 
 if __name__ == "__main__":

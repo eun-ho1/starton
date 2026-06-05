@@ -20,6 +20,7 @@ from app.services.today_planning_service import (
     TodayContext,
     TodayPlanningService,
 )
+from app.services.user_task_pattern_service import UserTaskPatternService
 
 
 class MediatorService:
@@ -31,12 +32,14 @@ class MediatorService:
         task_candidate_repository: SupabaseTaskCandidateRepository,
         gemini_provider: GeminiProvider,
         today_planning_service: TodayPlanningService,
+        user_task_pattern_service: UserTaskPatternService,
     ) -> None:
         self._raw_input_repository = raw_input_repository
         self._mediator_run_repository = mediator_run_repository
         self._task_candidate_repository = task_candidate_repository
         self._gemini_provider = gemini_provider
         self._today_planning_service = today_planning_service
+        self._user_task_pattern_service = user_task_pattern_service
 
     def create_candidate(
         self,
@@ -57,6 +60,8 @@ class MediatorService:
             raw_input.client_timezone,
         )
         normalized_user_context = _context_dict(user_context)
+        existing_tasks: list[dict[str, Any]] = []
+        user_patterns: dict[str, Any] = {}
         run: MediatorRunRecord | None = None
 
         try:
@@ -69,11 +74,17 @@ class MediatorService:
                 user_id=user_id,
                 timezone=resolved_timezone,
             )
+            existing_tasks, user_patterns = _pattern_prompt_context(
+                self._user_task_pattern_service,
+                user_id=user_id,
+            )
             model_context = _build_model_context(
                 raw_input=raw_input,
                 client_timezone=resolved_timezone,
                 user_context=normalized_user_context,
                 today_context=today_context,
+                existing_tasks=existing_tasks,
+                user_patterns=user_patterns,
             )
             run = self._mediator_run_repository.start(
                 user_id=user_id,
@@ -87,8 +98,8 @@ class MediatorService:
                 source=raw_input.source,
                 user_context=normalized_user_context,
                 today_context=today_context.to_prompt_context(),
-                existing_tasks=[],
-                user_patterns={},
+                existing_tasks=existing_tasks,
+                user_patterns=user_patterns,
             )
             guarded_output = self._today_planning_service.apply_capacity_guard(
                 output=mediator_result.output,
@@ -156,6 +167,8 @@ def _build_model_context(
     client_timezone: str,
     user_context: dict[str, Any],
     today_context: TodayContext,
+    existing_tasks: list[dict[str, Any]],
+    user_patterns: dict[str, Any],
 ) -> dict[str, Any]:
     return {
         "raw_input_id": raw_input.id,
@@ -164,8 +177,8 @@ def _build_model_context(
         "client_timezone": client_timezone,
         "user_context": user_context,
         "today_context": today_context.to_prompt_context(),
-        "existing_tasks": [],
-        "user_patterns": {},
+        "existing_tasks": existing_tasks,
+        "user_patterns": user_patterns,
     }
 
 
@@ -224,3 +237,17 @@ def _try_mark_raw_input_failed(
 
 def _error_message(error: Exception) -> str:
     return str(error).strip() or error.__class__.__name__
+
+
+def _pattern_prompt_context(
+    user_task_pattern_service: UserTaskPatternService,
+    *,
+    user_id: str,
+) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    try:
+        analysis = user_task_pattern_service.analyze(user_id=user_id)
+    except Exception:
+        return [], {}
+    if not analysis.data_sufficient:
+        return [], {}
+    return analysis.existing_tasks, analysis.prompt_payload

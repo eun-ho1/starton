@@ -71,6 +71,38 @@ class SupabaseTaskRepository:
             reminder_rows=self._list_reminders(user_id=user_id, task_id=task_row["id"]),
         )
 
+    def list_for_pattern_analysis(
+        self,
+        *,
+        user_id: str,
+        limit: int = 50,
+    ) -> list[TaskResponse]:
+        response = (
+            self._client.table("tasks")
+            .select(_TASK_COLUMNS)
+            .eq("user_id", user_id)
+            .order("created_at", desc=True)
+            .limit(limit)
+            .execute()
+        )
+        task_rows = response.data or []
+        if not task_rows:
+            return []
+
+        task_ids = [row["id"] for row in task_rows if row.get("id")]
+        subtasks_by_task_id = self._list_subtasks_for_tasks(
+            user_id=user_id,
+            task_ids=task_ids,
+        )
+        return [
+            _map_task_response(
+                row,
+                subtask_rows=subtasks_by_task_id.get(row["id"], []),
+                reminder_rows=[],
+            )
+            for row in task_rows
+        ]
+
     def create_task(self, payload: dict[str, Any]) -> TaskResponse:
         response = (
             self._client.table("tasks")
@@ -190,6 +222,32 @@ class SupabaseTaskRepository:
             .execute()
         )
         return response.data or []
+
+    def _list_subtasks_for_tasks(
+        self,
+        *,
+        user_id: str,
+        task_ids: list[str],
+    ) -> dict[str, list[dict[str, Any]]]:
+        if not task_ids:
+            return {}
+
+        response = (
+            self._client.table("subtasks")
+            .select(_SUBTASK_COLUMNS)
+            .eq("user_id", user_id)
+            .in_("task_id", task_ids)
+            .order("order_index")
+            .execute()
+        )
+        rows = response.data or []
+        grouped: dict[str, list[dict[str, Any]]] = {}
+        for row in rows:
+            task_id = row.get("task_id")
+            if not task_id:
+                continue
+            grouped.setdefault(task_id, []).append(row)
+        return grouped
 
     def _list_reminders(self, *, user_id: str, task_id: str) -> list[dict[str, Any]]:
         response = (

@@ -97,6 +97,19 @@ User patterns:
 {{user_patterns}}
 ```
 
+# Pattern Adaptation
+
+If `user_patterns.data_sufficient` is true, adapt the plan to the user's historical behavior.
+
+- Use `analysis_summary` as the main natural-language guide.
+- Respect `planning_biases` when choosing subtask size, ordering, pacing, and estimated minutes.
+- If the user tends to delay, avoid one large execution block and spread progress across smaller subtasks.
+- If shorter tasks or smaller breakdowns work better, keep each subtask lightweight and easy to start.
+- If higher difficulty tasks have lower completion, introduce low-friction setup subtasks before deep work.
+- Use `existing_tasks` to avoid overloading the user with too many heavy tasks at once.
+
+If `user_patterns` is empty or `data_sufficient` is false, use the normal default planning strategy.
+
 # Required Output
 
 Return only valid JSON matching the provided `MediatorOutput` schema.
