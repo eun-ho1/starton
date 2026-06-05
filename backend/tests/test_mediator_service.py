@@ -35,7 +35,10 @@ def enum_value(value: object) -> object:
     return getattr(value, "value", value)
 
 
-def make_raw_input_record() -> RawTaskInputRecord:
+def make_raw_input_record(
+    *,
+    client_metadata: dict[str, Any] | None = None,
+) -> RawTaskInputRecord:
     return RawTaskInputRecord(
         id=RAW_INPUT_ID,
         user_id=USER_ID,
@@ -44,7 +47,7 @@ def make_raw_input_record() -> RawTaskInputRecord:
         source=TaskSource.MANUAL.value,
         status=RawTaskInputStatus.RECEIVED.value,
         client_timezone="Asia/Seoul",
-        client_metadata={},
+        client_metadata=client_metadata or {},
         error_message=None,
         created_at=None,
         updated_at=None,
@@ -146,21 +149,38 @@ def make_candidate_response(output: MediatorOutput) -> TaskCandidateResponse:
         confidence=output.confidence,
         status=TaskCandidateStatus.DRAFT,
         model_payload=output.model_dump(mode="json"),
-        subtasks=[],
+        subtasks=[
+            {
+                "id": f"00000000-0000-4000-8000-{index + 100:012d}",
+                "candidate_id": CANDIDATE_ID,
+                "title": subtask.title,
+                "order_index": index,
+                "estimated_minutes": subtask.estimated_minutes,
+                "is_next_action": subtask.is_next_action,
+                "energy_required": subtask.energy_required,
+            }
+            for index, subtask in enumerate(output.subtasks)
+        ],
         reminders=[],
     )
 
 
 class FakeRawInputRepository:
-    def __init__(self, events: list[str]) -> None:
+    def __init__(
+        self,
+        events: list[str],
+        *,
+        record: RawTaskInputRecord | None = None,
+    ) -> None:
         self.events = events
+        self.record = record or make_raw_input_record()
         self.get_calls: list[dict[str, object]] = []
         self.status_updates: list[dict[str, object]] = []
 
     def get(self, *, user_id: str, raw_input_id: str) -> RawTaskInputRecord:
         self.events.append("raw.get")
         self.get_calls.append({"user_id": user_id, "raw_input_id": raw_input_id})
-        return make_raw_input_record()
+        return self.record
 
     def update_status(
         self,
@@ -180,7 +200,7 @@ class FakeRawInputRepository:
                 "error_message": error_message,
             }
         )
-        return make_raw_input_record()
+        return self.record
 
 
 class FakeMediatorRunRepository:
@@ -307,6 +327,7 @@ class FakeGeminiProvider:
     def __init__(self, events: list[str], *, error: Exception | None = None) -> None:
         self.events = events
         self.error = error
+        self.result_output: MediatorOutput | None = None
         self.calls: list[dict[str, object]] = []
 
     def generate_mediator_result(
@@ -332,7 +353,7 @@ class FakeGeminiProvider:
         )
         if self.error is not None:
             raise self.error
-        output = make_mediator_output()
+        output = self.result_output or make_mediator_output()
         return GeminiMediatorResult(
             output=output,
             raw_text='{"task_title":"컴퓨터비전 과제 제출 준비"}',
@@ -639,6 +660,74 @@ class MediatorServiceTest(unittest.TestCase):
         self.assertEqual(
             succeeded_call["parsed_output"]["overload_warning"],
             TASK_COUNT_LIMIT_WARNING,
+        )
+
+    def test_create_candidate_applies_equal_time_allocation_from_client_metadata(self) -> None:
+        (
+            service,
+            _events,
+            raw_input_repository,
+            mediator_run_repository,
+            task_candidate_repository,
+            gemini_provider,
+            _today_planning_service,
+            _fallback_mediator_service,
+            _user_task_pattern_service,
+        ) = self.make_service()
+        raw_input_repository.record = make_raw_input_record(
+            client_metadata={
+                "default_duration_seconds": 3600,
+                "subtask_generation_prompt": (
+                    "subtask_prompt_mode=focus_routine\n"
+                    "time_allocation=equal"
+                ),
+            }
+        )
+        gemini_provider.result_output = make_mediator_output().model_copy(
+            update={
+                "estimated_minutes": 60,
+                "subtasks": [
+                    MediatorSubtask(
+                        title="자료 열기",
+                        estimated_minutes=5,
+                        is_next_action=True,
+                        energy_required=TaskEnergyRequired.LOW,
+                    ),
+                    MediatorSubtask(
+                        title="핵심 내용 정리",
+                        estimated_minutes=30,
+                        is_next_action=False,
+                        energy_required=TaskEnergyRequired.MEDIUM,
+                    ),
+                    MediatorSubtask(
+                        title="초안 작성",
+                        estimated_minutes=25,
+                        is_next_action=False,
+                        energy_required=TaskEnergyRequired.MEDIUM,
+                    ),
+                ],
+            }
+        )
+
+        candidate = service.create_candidate(
+            user_id=USER_ID,
+            raw_input_id=RAW_INPUT_ID,
+            client_timezone="Asia/Seoul",
+            user_context={"energy_now": "medium"},
+        )
+
+        start_call = mediator_run_repository.start_calls[0]
+        self.assertEqual(start_call["input_context"]["time_allocation"], "equal")
+
+        create_call = task_candidate_repository.create_calls[0]
+        self.assertEqual(
+            [subtask.estimated_minutes for subtask in create_call["output"].subtasks],
+            [5, 28, 27],
+        )
+        self.assertEqual(create_call["output"].estimated_minutes, 60)
+        self.assertEqual(
+            [subtask.estimated_minutes for subtask in candidate.subtasks],
+            [5, 28, 27],
         )
 
     def test_create_candidate_marks_failed_when_gemini_fails(self) -> None:

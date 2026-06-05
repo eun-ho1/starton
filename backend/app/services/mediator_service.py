@@ -15,6 +15,10 @@ from app.providers.gemini_provider import GeminiMediatorResult, GeminiProvider
 from app.schemas.mediator import MediatorOutput
 from app.schemas.task_candidate import TaskCandidateResponse
 from app.schemas.task_intake import RawTaskInputStatus, UserContext
+from app.services.subtask_time_allocation import (
+    apply_time_allocation,
+    resolve_time_allocation,
+)
 from app.services.today_planning_service import (
     DEFAULT_TIMEZONE,
     TodayContext,
@@ -89,6 +93,7 @@ class MediatorService:
                 user_context=normalized_user_context,
                 today_context=compact_today_context,
                 user_patterns=user_patterns,
+                time_allocation=resolve_time_allocation(raw_input.client_metadata),
             )
             run = self._mediator_run_repository.start(
                 user_id=user_id,
@@ -124,6 +129,10 @@ class MediatorService:
                     output=mediator_output,
                 )
 
+            mediator_output = apply_time_allocation(
+                mediator_output,
+                client_metadata=raw_input.client_metadata,
+            )
             guarded_output = self._today_planning_service.apply_capacity_guard(
                 output=mediator_output,
                 today_context=today_context,
@@ -211,8 +220,9 @@ def _build_model_context(
     user_context: dict[str, Any],
     today_context: dict[str, Any],
     user_patterns: dict[str, Any],
+    time_allocation: str | None,
 ) -> dict[str, Any]:
-    return {
+    context = {
         "raw_input_id": raw_input.id,
         "raw_text": raw_input.raw_text,
         "source": raw_input.source,
@@ -220,7 +230,11 @@ def _build_model_context(
         "user_context": user_context,
         "today_context": today_context,
         "user_patterns": user_patterns,
+        "client_metadata": raw_input.client_metadata,
     }
+    if time_allocation is not None:
+        context["time_allocation"] = time_allocation
+    return context
 
 
 def _provider_model_name(provider: GeminiProvider) -> str:
