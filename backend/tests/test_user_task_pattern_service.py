@@ -170,13 +170,12 @@ class UserTaskPatternServiceTest(unittest.TestCase):
         analysis = _build_analysis(tasks)
 
         self.assertTrue(analysis.data_sufficient)
-        self.assertIn("analysis_summary", analysis.prompt_payload)
-        self.assertIn("planning_biases", analysis.prompt_payload)
-        self.assertIn("delay_risk", analysis.prompt_payload["planning_biases"])
-        self.assertIn("short_tasks_work_better", analysis.prompt_payload["planning_biases"])
-        self.assertIn("smaller_breakdowns_work_better", analysis.prompt_payload["planning_biases"])
-        self.assertEqual(len(analysis.existing_tasks), 2)
-        self.assertEqual(analysis.existing_tasks[0]["title"], "open-overdue")
+        self.assertEqual(analysis.prompt_payload["task_count_used_for_analysis"], 6)
+        self.assertEqual(analysis.prompt_payload["completion_rate"], 0.667)
+        self.assertEqual(analysis.prompt_payload["prefers_small_tasks"], True)
+        self.assertEqual(analysis.prompt_payload["procrastination_level"], "high")
+        self.assertEqual(analysis.prompt_payload["task_completion_style"], "incremental")
+        self.assertEqual(analysis.existing_tasks, [])
 
     def test_service_reads_recent_tasks_from_repository(self) -> None:
         now = datetime.now(timezone.utc)

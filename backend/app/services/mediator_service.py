@@ -20,6 +20,7 @@ from app.services.today_planning_service import (
     TodayContext,
     TodayPlanningService,
 )
+from app.services.fallback_mediator_service import FallbackMediatorService
 from app.services.user_task_pattern_service import UserTaskPatternService
 
 
@@ -32,6 +33,7 @@ class MediatorService:
         task_candidate_repository: SupabaseTaskCandidateRepository,
         gemini_provider: GeminiProvider,
         today_planning_service: TodayPlanningService,
+        fallback_mediator_service: FallbackMediatorService,
         user_task_pattern_service: UserTaskPatternService,
     ) -> None:
         self._raw_input_repository = raw_input_repository
@@ -39,6 +41,7 @@ class MediatorService:
         self._task_candidate_repository = task_candidate_repository
         self._gemini_provider = gemini_provider
         self._today_planning_service = today_planning_service
+        self._fallback_mediator_service = fallback_mediator_service
         self._user_task_pattern_service = user_task_pattern_service
 
     def create_candidate(
@@ -59,10 +62,11 @@ class MediatorService:
             client_timezone,
             raw_input.client_timezone,
         )
-        normalized_user_context = _context_dict(user_context)
+        normalized_user_context = _compact_user_context(_context_dict(user_context))
         existing_tasks: list[dict[str, Any]] = []
         user_patterns: dict[str, Any] = {}
         run: MediatorRunRecord | None = None
+        raw_model_output: dict[str, Any] | None = None
 
         try:
             self._raw_input_repository.update_status(
@@ -74,6 +78,7 @@ class MediatorService:
                 user_id=user_id,
                 timezone=resolved_timezone,
             )
+            compact_today_context = _compact_today_context(today_context)
             existing_tasks, user_patterns = _pattern_prompt_context(
                 self._user_task_pattern_service,
                 user_id=user_id,
@@ -82,8 +87,7 @@ class MediatorService:
                 raw_input=raw_input,
                 client_timezone=resolved_timezone,
                 user_context=normalized_user_context,
-                today_context=today_context,
-                existing_tasks=existing_tasks,
+                today_context=compact_today_context,
                 user_patterns=user_patterns,
             )
             run = self._mediator_run_repository.start(
@@ -93,16 +97,35 @@ class MediatorService:
                 model_name=_provider_model_name(self._gemini_provider),
                 input_context=model_context,
             )
-            mediator_result = self._gemini_provider.generate_mediator_result(
-                raw_text=raw_input.raw_text,
-                source=raw_input.source,
-                user_context=normalized_user_context,
-                today_context=today_context.to_prompt_context(),
-                existing_tasks=existing_tasks,
-                user_patterns=user_patterns,
-            )
+            try:
+                mediator_result = self._gemini_provider.generate_mediator_result(
+                    raw_text=raw_input.raw_text,
+                    source=raw_input.source,
+                    user_context=normalized_user_context,
+                    today_context=compact_today_context,
+                    existing_tasks=existing_tasks,
+                    user_patterns=user_patterns,
+                )
+                mediator_output = mediator_result.output
+                raw_model_output = _raw_model_output(mediator_result)
+            except Exception as error:
+                if not _is_transient_ai_error(error):
+                    raise
+                mediator_output = self._fallback_mediator_service.create_output(
+                    raw_text=raw_input.raw_text,
+                    user_context=normalized_user_context,
+                    today_context=compact_today_context,
+                    client_metadata=raw_input.client_metadata,
+                    user_patterns=user_patterns,
+                )
+                raw_model_output = _fallback_model_output(
+                    provider=self._gemini_provider,
+                    error=error,
+                    output=mediator_output,
+                )
+
             guarded_output = self._today_planning_service.apply_capacity_guard(
-                output=mediator_result.output,
+                output=mediator_output,
                 today_context=today_context,
             )
             candidate = self._task_candidate_repository.create_from_mediator_output(
@@ -115,7 +138,7 @@ class MediatorService:
             self._mediator_run_repository.mark_succeeded(
                 user_id=user_id,
                 run_id=run.id,
-                raw_model_output=_raw_model_output(mediator_result),
+                raw_model_output=raw_model_output or _parsed_output(guarded_output),
                 parsed_output=_parsed_output(guarded_output),
             )
             self._raw_input_repository.update_status(
@@ -161,13 +184,32 @@ def _context_dict(value: UserContext | dict[str, Any] | None) -> dict[str, Any]:
     return dict(value)
 
 
+def _compact_user_context(value: dict[str, Any]) -> dict[str, Any]:
+    compact: dict[str, Any] = {}
+    energy_now = value.get("energy_now")
+    if isinstance(energy_now, str) and energy_now.strip():
+        compact["energy_now"] = energy_now.strip()
+    available_minutes_today = value.get("available_minutes_today")
+    if isinstance(available_minutes_today, int) and available_minutes_today > 0:
+        compact["available_minutes_today"] = available_minutes_today
+    return compact
+
+
+def _compact_today_context(today_context: TodayContext) -> dict[str, Any]:
+    compact: dict[str, Any] = {}
+    if today_context.today_task_count > 0:
+        compact["today_task_count"] = today_context.today_task_count
+    if today_context.today_estimated_minutes > 0:
+        compact["today_estimated_minutes"] = today_context.today_estimated_minutes
+    return compact
+
+
 def _build_model_context(
     *,
     raw_input: RawTaskInputRecord,
     client_timezone: str,
     user_context: dict[str, Any],
-    today_context: TodayContext,
-    existing_tasks: list[dict[str, Any]],
+    today_context: dict[str, Any],
     user_patterns: dict[str, Any],
 ) -> dict[str, Any]:
     return {
@@ -176,8 +218,7 @@ def _build_model_context(
         "source": raw_input.source,
         "client_timezone": client_timezone,
         "user_context": user_context,
-        "today_context": today_context.to_prompt_context(),
-        "existing_tasks": existing_tasks,
+        "today_context": today_context,
         "user_patterns": user_patterns,
     }
 
@@ -193,6 +234,21 @@ def _raw_model_output(result: GeminiMediatorResult) -> dict[str, Any]:
         "raw_text": result.raw_text,
         "parsed": result.parsed,
         "rendered_prompt": result.rendered_prompt,
+    }
+
+
+def _fallback_model_output(
+    *,
+    provider: GeminiProvider,
+    error: Exception,
+    output: MediatorOutput,
+) -> dict[str, Any]:
+    return {
+        "model_name": _provider_model_name(provider),
+        "prompt_version": "fallback_mediator_v1",
+        "fallback_used": True,
+        "fallback_reason": str(error).strip() or error.__class__.__name__,
+        "parsed": output.model_dump(mode="json"),
     }
 
 
@@ -251,3 +307,22 @@ def _pattern_prompt_context(
     if not analysis.data_sufficient:
         return [], {}
     return analysis.existing_tasks, analysis.prompt_payload
+
+
+def _is_transient_ai_error(error: Exception) -> bool:
+    message = str(error).lower().strip()
+    if not message:
+        return False
+    return any(
+        token in message
+        for token in (
+            "503",
+            "unavailable",
+            "resource_exhausted",
+            "rate limit",
+            "too many requests",
+            "deadline exceeded",
+            "timeout",
+            "timed out",
+        )
+    )

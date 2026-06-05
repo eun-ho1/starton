@@ -244,6 +244,27 @@ class TaskIntakeRouteTest(unittest.TestCase):
             "AI provider is not configured correctly on the server.",
         )
 
+    def test_create_task_intake_maps_temporary_provider_unavailable_to_503(self) -> None:
+        service = FakeIntakeService(
+            error=RuntimeError(
+                "google.genai.errors.ServerError: 503 UNAVAILABLE: This model is currently experiencing high demand. Please try again later."
+            )
+        )
+        client = self.make_client(service)
+
+        response = client.post(
+            "/api/v1/task-intake",
+            json={"text": "과제 준비"},
+        )
+
+        self.assertEqual(response.status_code, 503)
+        detail = response.json()["detail"]
+        self.assertEqual(detail["code"], "ai_provider_temporarily_unavailable")
+        self.assertEqual(
+            detail["message"],
+            "AI provider is temporarily unavailable. Please retry shortly.",
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

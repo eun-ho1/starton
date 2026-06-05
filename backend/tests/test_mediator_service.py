@@ -407,19 +407,16 @@ class FakeUserTaskPatternService:
             data_sufficient=True,
             history_count=8,
             completed_count=6,
-            existing_tasks=[
-                {
-                    "title": "미완료 업무 정리",
-                    "status": "todo",
-                    "estimated_minutes": 20,
-                    "subtask_count": 2,
-                }
-            ],
+            existing_tasks=[],
             prompt_payload={
-                "data_sufficient": True,
-                "analysis_summary": "짧은 task와 작은 subtask 분해에서 완료율이 더 높습니다.",
-                "planning_biases": ["short_tasks_work_better"],
-                "metrics": {"completion_rate": 0.75},
+                "task_count_used_for_analysis": 8,
+                "completion_rate": 0.75,
+                "avg_delay_days": 2.1,
+                "avg_completion_hours": 18.0,
+                "prefers_small_tasks": True,
+                "procrastination_level": "high",
+                "task_completion_style": "incremental",
+                "difficulty_dropoff": False,
             },
         )
         self.calls: list[dict[str, object]] = []
@@ -430,6 +427,38 @@ class FakeUserTaskPatternService:
         if self.error is not None:
             raise self.error
         return self.analysis
+
+
+class FakeFallbackMediatorService:
+    def __init__(self, events: list[str]) -> None:
+        self.events = events
+        self.calls: list[dict[str, object]] = []
+
+    def create_output(
+        self,
+        *,
+        raw_text: str,
+        user_context: dict[str, object] | None = None,
+        today_context: dict[str, object] | None = None,
+        client_metadata: dict[str, object] | None = None,
+        user_patterns: dict[str, object] | None = None,
+    ) -> MediatorOutput:
+        self.events.append("fallback.generate")
+        self.calls.append(
+            {
+                "raw_text": raw_text,
+                "user_context": user_context,
+                "today_context": today_context,
+                "client_metadata": client_metadata,
+                "user_patterns": user_patterns,
+            }
+        )
+        return make_mediator_output().model_copy(
+            update={
+                "task_title": "fallback candidate",
+                "description": "fallback description",
+            }
+        )
 
 
 class MediatorServiceTest(unittest.TestCase):
@@ -445,6 +474,7 @@ class MediatorServiceTest(unittest.TestCase):
         FakeTaskCandidateRepository,
         FakeGeminiProvider,
         FakeTodayPlanningService,
+        FakeFallbackMediatorService,
         FakeUserTaskPatternService,
     ]:
         events: list[str] = []
@@ -453,6 +483,7 @@ class MediatorServiceTest(unittest.TestCase):
         task_candidate_repository = FakeTaskCandidateRepository(events)
         gemini_provider = FakeGeminiProvider(events, error=gemini_error)
         today_planning_service = FakeTodayPlanningService(events)
+        fallback_mediator_service = FakeFallbackMediatorService(events)
         user_task_pattern_service = FakeUserTaskPatternService(events)
         service = MediatorService(
             raw_input_repository=raw_input_repository,
@@ -460,6 +491,7 @@ class MediatorServiceTest(unittest.TestCase):
             task_candidate_repository=task_candidate_repository,
             gemini_provider=gemini_provider,
             today_planning_service=today_planning_service,
+            fallback_mediator_service=fallback_mediator_service,
             user_task_pattern_service=user_task_pattern_service,
         )
         return (
@@ -470,6 +502,7 @@ class MediatorServiceTest(unittest.TestCase):
             task_candidate_repository,
             gemini_provider,
             today_planning_service,
+            fallback_mediator_service,
             user_task_pattern_service,
         )
 
@@ -482,6 +515,7 @@ class MediatorServiceTest(unittest.TestCase):
             task_candidate_repository,
             gemini_provider,
             today_planning_service,
+            _fallback_mediator_service,
             user_task_pattern_service,
         ) = self.make_service()
 
@@ -517,19 +551,19 @@ class MediatorServiceTest(unittest.TestCase):
         self.assertEqual(start_call["model_name"], "fake-gemini")
         self.assertEqual(start_call["profile_id"], PROFILE_ID)
         self.assertEqual(start_call["input_context"]["raw_text"], "컴비전 과제 해야 함")
-        self.assertEqual(len(start_call["input_context"]["existing_tasks"]), 1)
+        self.assertEqual(start_call["input_context"].get("existing_tasks"), None)
         self.assertEqual(
-            start_call["input_context"]["user_patterns"]["planning_biases"],
-            ["short_tasks_work_better"],
+            start_call["input_context"]["user_patterns"]["prefers_small_tasks"],
+            True,
         )
 
         gemini_call = gemini_provider.calls[0]
         self.assertEqual(gemini_call["raw_text"], "컴비전 과제 해야 함")
         self.assertEqual(gemini_call["source"], TaskSource.MANUAL.value)
-        self.assertEqual(len(gemini_call["existing_tasks"]), 1)
+        self.assertEqual(gemini_call["existing_tasks"], [])
         self.assertEqual(
-            gemini_call["user_patterns"]["analysis_summary"],
-            "짧은 task와 작은 subtask 분해에서 완료율이 더 높습니다.",
+            gemini_call["user_patterns"]["procrastination_level"],
+            "high",
         )
         self.assertEqual(user_task_pattern_service.calls[0]["user_id"], USER_ID)
 
@@ -577,6 +611,7 @@ class MediatorServiceTest(unittest.TestCase):
             task_candidate_repository=task_candidate_repository,
             gemini_provider=gemini_provider,
             today_planning_service=TodayPlanningService(today_context_repository),
+            fallback_mediator_service=FakeFallbackMediatorService(events),
             user_task_pattern_service=FakeUserTaskPatternService(events),
         )
 
@@ -615,10 +650,11 @@ class MediatorServiceTest(unittest.TestCase):
             task_candidate_repository,
             _gemini_provider,
             _today_planning_service,
+            _fallback_mediator_service,
             _user_task_pattern_service,
-        ) = self.make_service(gemini_error=RuntimeError("gemini unavailable"))
+        ) = self.make_service(gemini_error=RuntimeError("schema mismatch"))
 
-        with self.assertRaisesRegex(RuntimeError, "gemini unavailable"):
+        with self.assertRaisesRegex(RuntimeError, "schema mismatch"):
             service.create_candidate(user_id=USER_ID, raw_input_id=RAW_INPUT_ID)
 
         self.assertEqual(
@@ -638,12 +674,12 @@ class MediatorServiceTest(unittest.TestCase):
         self.assertEqual(mediator_run_repository.succeeded_calls, [])
         self.assertEqual(
             mediator_run_repository.failed_calls[0]["error_message"],
-            "gemini unavailable",
+            "schema mismatch",
         )
         self.assertEqual(raw_input_repository.status_updates[-1]["status"], "failed")
         self.assertEqual(
             raw_input_repository.status_updates[-1]["error_message"],
-            "gemini unavailable",
+            "schema mismatch",
         )
 
     def test_create_candidate_falls_back_when_pattern_analysis_fails(self) -> None:
@@ -663,6 +699,7 @@ class MediatorServiceTest(unittest.TestCase):
             task_candidate_repository=task_candidate_repository,
             gemini_provider=gemini_provider,
             today_planning_service=today_planning_service,
+            fallback_mediator_service=FakeFallbackMediatorService(events),
             user_task_pattern_service=user_task_pattern_service,
         )
 
@@ -670,12 +707,67 @@ class MediatorServiceTest(unittest.TestCase):
 
         self.assertIn("patterns.analyze", events)
         start_call = mediator_run_repository.start_calls[0]
-        self.assertEqual(start_call["input_context"]["existing_tasks"], [])
+        self.assertEqual(start_call["input_context"].get("existing_tasks"), None)
         self.assertEqual(start_call["input_context"]["user_patterns"], {})
 
         gemini_call = gemini_provider.calls[0]
         self.assertEqual(gemini_call["existing_tasks"], [])
         self.assertEqual(gemini_call["user_patterns"], {})
+
+    def test_create_candidate_uses_fallback_when_gemini_is_temporarily_unavailable(self) -> None:
+        (
+            service,
+            events,
+            raw_input_repository,
+            mediator_run_repository,
+            task_candidate_repository,
+            _gemini_provider,
+            today_planning_service,
+            fallback_mediator_service,
+            _user_task_pattern_service,
+        ) = self.make_service(
+            gemini_error=RuntimeError(
+                "google.genai.errors.ServerError: 503 UNAVAILABLE: This model is currently experiencing high demand. Please try again later."
+            )
+        )
+
+        candidate = service.create_candidate(
+            user_id=USER_ID,
+            raw_input_id=RAW_INPUT_ID,
+            client_timezone="Asia/Seoul",
+            user_context={"energy_now": "medium"},
+        )
+
+        self.assertEqual(
+            events,
+            [
+                "raw.get",
+                "raw.status:processing",
+                "today.get",
+                "patterns.analyze",
+                "run.start",
+                "gemini.generate",
+                "fallback.generate",
+                "today.guard",
+                "candidate.create",
+                "run.succeeded",
+                "raw.status:candidate_ready",
+            ],
+        )
+        self.assertEqual(candidate.title, "fallback candidate")
+        self.assertEqual(today_planning_service.get_calls[0]["timezone"], "Asia/Seoul")
+        self.assertEqual(len(fallback_mediator_service.calls), 1)
+        self.assertEqual(
+            task_candidate_repository.create_calls[0]["output"].task_title,
+            "fallback candidate",
+        )
+        self.assertTrue(
+            mediator_run_repository.succeeded_calls[0]["raw_model_output"]["fallback_used"]
+        )
+        self.assertEqual(
+            [update["status"] for update in raw_input_repository.status_updates],
+            ["processing", "candidate_ready"],
+        )
 
 
 if __name__ == "__main__":

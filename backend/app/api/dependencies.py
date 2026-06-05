@@ -34,6 +34,7 @@ from app.services.task_candidate_review_service import TaskCandidateReviewServic
 from app.services.task_commit_service import TaskCommitService
 from app.services.task_service import TaskService
 from app.services.today_planning_service import TodayPlanningService
+from app.services.fallback_mediator_service import FallbackMediatorService
 from app.services.user_task_pattern_service import UserTaskPatternService
 
 def get_current_user_id(
@@ -119,6 +120,10 @@ def get_user_task_pattern_service() -> UserTaskPatternService:
     return UserTaskPatternService(task_repository=get_task_repository())
 
 
+def get_fallback_mediator_service() -> FallbackMediatorService:
+    return FallbackMediatorService()
+
+
 def get_gemini_provider() -> GeminiProvider:
     return GeminiProvider()
 
@@ -130,6 +135,7 @@ def get_mediator_service() -> MediatorService:
         task_candidate_repository=get_task_candidate_repository(),
         gemini_provider=get_gemini_provider(),
         today_planning_service=get_today_planning_service(),
+        fallback_mediator_service=get_fallback_mediator_service(),
         user_task_pattern_service=get_user_task_pattern_service(),
     )
 

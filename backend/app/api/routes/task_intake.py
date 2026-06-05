@@ -76,6 +76,14 @@ def _task_intake_error_detail(error: Exception) -> tuple[int, ErrorDetail]:
                 message="AI provider response timed out. Please retry later.",
             ),
         )
+    if _is_provider_temporarily_unavailable_error(error):
+        return (
+            status.HTTP_503_SERVICE_UNAVAILABLE,
+            ErrorDetail(
+                code="ai_provider_temporarily_unavailable",
+                message="AI provider is temporarily unavailable. Please retry shortly.",
+            ),
+        )
     if _is_provider_configuration_error(error):
         return (
             status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -144,5 +152,23 @@ def _is_provider_configuration_error(error: Exception) -> bool:
             "api key not valid",
             "api_key_invalid",
             "invalid api key",
+        )
+    )
+
+
+def _is_provider_temporarily_unavailable_error(error: Exception) -> bool:
+    message = str(error).lower().strip()
+    if not message:
+        return False
+
+    return any(
+        token in message
+        for token in (
+            "503 unavailable",
+            "status: 'unavailable'",
+            "status\":\"unavailable\"",
+            "servererror: 503",
+            "currently experiencing high demand",
+            "try again later",
         )
     )
