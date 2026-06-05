@@ -1,6 +1,8 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:start_on/models/quest_api_models.dart';
 import 'package:start_on/models/quest_item.dart';
+import 'package:start_on/models/task_intake_api_models.dart';
+import 'package:start_on/models/task_quest_mapper.dart';
 
 void main() {
   test('fromApiResponse maps server quest fields to screen model fields', () {
@@ -223,5 +225,55 @@ void main() {
 
     expect(quest.effectiveDurationSeconds, 180);
     expect(quest.effectiveActiveSubtaskId, 'next-subtask');
+  });
+
+  test('task mapper restores task elapsed and nested metadata fields', () {
+    final fallback = QuestItem(
+      id: 'task-1',
+      title: 'fallback',
+      exp: 30,
+      difficulty: '쉬움',
+      category: 'life',
+      elapsedSeconds: 99,
+      defaultDurationSeconds: 1500,
+      syncTarget: questSyncTargetTask,
+    );
+    const task = TaskResponse(
+      id: 'task-1',
+      userId: 'user-1',
+      candidateId: null,
+      rawInputId: null,
+      mediatorRunId: null,
+      title: '서버 task',
+      description: null,
+      status: 'todo',
+      priority: null,
+      dueAt: null,
+      estimatedMinutes: null,
+      energyRequired: null,
+      difficulty: 'high',
+      nextAction: null,
+      source: 'ai',
+      elapsedSeconds: 420,
+      metadata: <String, dynamic>{
+        'elapsed_seconds': '300',
+        'exp': '80',
+        'default_duration_seconds': '2400',
+        'client_metadata': <String, dynamic>{'category': 'study'},
+      },
+      subtasks: <SubtaskResponse>[],
+      reminders: <ReminderResponse>[],
+      createdAt: null,
+      updatedAt: null,
+      completedAt: null,
+    );
+
+    final quest = questItemFromTaskResponse(task, fallbackDraft: fallback);
+
+    expect(quest.category, 'study');
+    expect(quest.elapsedSeconds, 420);
+    expect(quest.exp, 80);
+    expect(quest.defaultDurationSeconds, 2400);
+    expect(quest.syncTarget, questSyncTargetTask);
   });
 }

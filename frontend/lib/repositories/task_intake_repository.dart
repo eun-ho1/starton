@@ -102,6 +102,23 @@ class TaskIntakeRepository {
     );
   }
 
+  Future<TaskResponse> updateTaskProgress(
+    String taskId, {
+    required int elapsedSeconds,
+  }) async {
+    final response = await _apiClient.patchResponse<TaskResponse>(
+      '/tasks/${Uri.encodeComponent(taskId)}/progress',
+      body: {'elapsed_seconds': elapsedSeconds < 0 ? 0 : elapsedSeconds},
+      parseData: TaskResponse.fromJson,
+    );
+
+    return _requireData(
+      response,
+      code: 'missing_updated_task',
+      message: 'Server response did not include the updated task.',
+    );
+  }
+
   Future<CompletedQuestRecordResponse> completeTask(
     String taskId, {
     required int elapsedSeconds,

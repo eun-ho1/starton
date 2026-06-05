@@ -22,8 +22,8 @@ class LocalDataStore {
 
     try {
       final decoded = jsonDecode(raw) as Map<String, dynamic>;
-      final normalized = normalizeLocalDataForDate(
-        AppLocalData.fromJson(decoded),
+      final normalized = _sanitizeLoadedData(
+        normalizeLocalDataForDate(AppLocalData.fromJson(decoded)),
       );
       final normalizedRaw = jsonEncode(normalized.toJson());
       if (normalizedRaw != raw) {
@@ -39,7 +39,8 @@ class LocalDataStore {
 
   Future<void> save(AppLocalData data) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_storageKey, jsonEncode(data.toJson()));
+    final sanitized = _sanitizeLoadedData(data);
+    await prefs.setString(_storageKey, jsonEncode(sanitized.toJson()));
   }
 
   AppLocalData replaceNotionQuests(
@@ -181,4 +182,20 @@ class LocalDataStore {
       clearedDungeonIds: [...normalized.clearedDungeonIds, dungeonId],
     );
   }
+}
+
+AppLocalData _sanitizeLoadedData(AppLocalData data) {
+  final completedQuestIds = data.completedQuests
+      .map((record) => record.questId.trim())
+      .where((id) => id.isNotEmpty)
+      .toSet();
+  if (completedQuestIds.isEmpty) {
+    return data;
+  }
+
+  return data.copyWith(
+    quests: data.quests
+        .where((quest) => !completedQuestIds.contains(quest.id.trim()))
+        .toList(),
+  );
 }

@@ -27,22 +27,29 @@ class RecordScreen extends StatelessWidget {
                   Expanded(
                     child: RecordSummaryCard(
                       bgColor: const Color(0xFFFF7F88),
-                      title: '이번 주',
-                      value: '${data.weeklyCompletedCount}',
-                      subtitle: '완료한 퀘스트',
+                      title: '전체 완료',
+                      value: '${data.completedQuestCount}',
+                      subtitle: '누적 완료 퀘스트',
                     ),
                   ),
                   const SizedBox(width: 14),
                   Expanded(
                     child: RecordSummaryCard(
                       bgColor: const Color(0xFFAED7FF),
-                      title: '달성률',
-                      value: '${data.weeklyCompletionRate}%',
-                      subtitle:
-                          '지난 주 대비 ${data.weeklyRateDelta >= 0 ? '+' : ''}${data.weeklyRateDelta}%',
+                      title: '이번 주',
+                      value: '${data.weeklyCompletedCount}',
+                      subtitle: '완료한 퀘스트',
                     ),
                   ),
                 ],
+              ),
+              const SizedBox(height: 14),
+              RecordSummaryCard(
+                bgColor: const Color(0xFF8D7CFF),
+                title: '달성률',
+                value: '${data.weeklyCompletionRate}%',
+                subtitle:
+                    '지난 주 대비 ${data.weeklyRateDelta >= 0 ? '+' : ''}${data.weeklyRateDelta}%',
               ),
               const SizedBox(height: 22),
               RecordActivityChartCard(data: data),

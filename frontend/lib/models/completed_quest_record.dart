@@ -57,17 +57,45 @@ class CompletedQuestRecord {
 
   factory CompletedQuestRecord.fromJson(Map<String, dynamic> json) {
     return CompletedQuestRecord(
-      questId: json['questId'] as String? ?? '',
+      questId:
+          (json['questId'] as String?) ??
+          (json['quest_id'] as String?) ??
+          (json['task_id'] as String?) ??
+          '',
       title: json['title'] as String? ?? '',
       difficulty: normalizeQuestDifficulty(json['difficulty'] as String?),
       category: normalizeQuestCategory(json['category'] as String?),
-      earnedExp: json['earnedExp'] as int? ?? 0,
-      completedAt: json['completedAt'] as String? ?? '',
-      elapsedSeconds: json['elapsedSeconds'] as int? ?? 0,
+      earnedExp:
+          _readJsonInt(json['earnedExp']) ??
+          _readJsonInt(json['earned_exp']) ??
+          0,
+      completedAt:
+          (json['completedAt'] as String?) ??
+          (json['completed_at'] as String?) ??
+          '',
+      elapsedSeconds:
+          _readJsonInt(json['elapsedSeconds']) ??
+          _readJsonInt(json['elapsed_seconds']) ??
+          0,
       subtasks: _completedRecordSubtasksFromJson(json['subtasks']),
-      proofImagePath: json['proofImagePath'] as String?,
+      proofImagePath:
+          (json['proofImagePath'] as String?) ??
+          (json['proof_image_path'] as String?),
     );
   }
+}
+
+int? _readJsonInt(Object? value) {
+  if (value is int) {
+    return value;
+  }
+  if (value is num) {
+    return value.toInt();
+  }
+  if (value is String) {
+    return int.tryParse(value.trim());
+  }
+  return null;
 }
 
 List<QuestSubtask> _completedRecordSubtasksFromJson(Object? value) {

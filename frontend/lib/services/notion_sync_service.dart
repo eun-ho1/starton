@@ -80,9 +80,7 @@ class NotionSyncService {
     final inputId = normalizeDatabaseId(trimmedInput);
 
     if (trimmedToken.isEmpty) {
-      throw const NotionSyncException(
-        'Notion 토큰을 입력해 주세요.',
-      );
+      throw const NotionSyncException('Notion 토큰을 입력해 주세요.');
     }
     if (inputId.isEmpty) {
       throw const NotionSyncException(
@@ -191,9 +189,7 @@ class NotionSyncService {
     } on ApiClientException catch (error) {
       throw NotionSyncException(_describeApiError(error));
     } on FormatException {
-      throw const NotionSyncException(
-        '서버에서 올바르지 않은 Notion 응답을 반환했어요.',
-      );
+      throw const NotionSyncException('서버에서 올바르지 않은 Notion 응답을 반환했어요.');
     }
   }
 
@@ -378,8 +374,7 @@ class _NotionQuestCandidate {
   final String? externalId;
 
   QuestItem toQuestItem({required String databaseId, required int index}) {
-    final stableId =
-        externalId == null || externalId!.trim().isEmpty
+    final stableId = externalId == null || externalId!.trim().isEmpty
         ? '$databaseId:$index:$title'
         : externalId!;
     return QuestItem(

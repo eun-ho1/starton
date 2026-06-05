@@ -31,7 +31,13 @@ class SupabaseQuestRepository(QuestRepository):
             .order("created_at", desc=True)
             .execute()
         )
-        rows = _deduplicate_notion_rows(response.data or [])
+        completed_quest_ids = _completed_quest_ids(self._client, user_id)
+        rows = [
+            row
+            for row in _deduplicate_notion_rows(response.data or [])
+            if str(row.get("id") or "") not in completed_quest_ids
+            and str(row.get("client_quest_id") or "") not in completed_quest_ids
+        ]
         return [_map_quest_row(row) for row in rows]
 
     def create_quest(
@@ -212,6 +218,26 @@ class SupabaseQuestRepository(QuestRepository):
             else:
                 summary.updated_count += 1
         return summary
+
+
+def _completed_quest_ids(client: Any, user_id: str) -> set[str]:
+    try:
+        response = (
+            client.table("completed_quests")
+            .select("quest_id, client_quest_id")
+            .eq("user_id", user_id)
+            .execute()
+        )
+    except Exception:
+        return set()
+
+    completed_ids: set[str] = set()
+    for row in response.data or []:
+        for key in ("quest_id", "client_quest_id"):
+            value = row.get(key)
+            if value is not None and str(value).strip():
+                completed_ids.add(str(value))
+    return completed_ids
 
 
 def _get_profile_id(client: Any, user_id: str) -> str:

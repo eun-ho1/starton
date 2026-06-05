@@ -59,4 +59,3 @@ class LeaderboardRepositoryException implements Exception {
   @override
   String toString() => 'LeaderboardRepositoryException($code): $message';
 }
-

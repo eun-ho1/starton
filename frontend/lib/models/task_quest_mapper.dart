@@ -6,15 +6,29 @@ QuestItem questItemFromTaskResponse(
   required QuestItem fallbackDraft,
 }) {
   final difficulty = _questDifficultyFromTaskResponse(task.difficulty);
-  final category = _metadataString(task.metadata, "category");
+  final category =
+      _metadataString(task.metadata, "category") ??
+      _nestedMetadataString(task.metadata, "client_metadata", "category") ??
+      _nestedMetadataString(task.metadata, "edited_fields", "category") ??
+      fallbackDraft.category;
+  final elapsedSeconds =
+      task.elapsedSeconds ??
+      _metadataInt(task.metadata, "elapsed_seconds") ??
+      _metadataInt(task.metadata, "elapsedSeconds") ??
+      _nestedMetadataInt(task.metadata, "client_metadata", "elapsed_seconds") ??
+      _nestedMetadataInt(task.metadata, "client_metadata", "elapsedSeconds") ??
+      fallbackDraft.elapsedSeconds;
 
   return QuestItem(
     id: task.id,
     title: task.title,
-    exp: _expForQuestDifficulty(difficulty),
+    exp:
+        _metadataInt(task.metadata, "exp") ??
+        _nestedMetadataInt(task.metadata, "client_metadata", "exp") ??
+        fallbackDraft.exp,
     difficulty: difficulty,
-    category: normalizeQuestCategory(category ?? fallbackDraft.category),
-    elapsedSeconds: 0,
+    category: normalizeQuestCategory(category),
+    elapsedSeconds: elapsedSeconds,
     defaultDurationSeconds: _taskDurationSecondsFromTaskResponse(
       task,
       difficulty: difficulty,
@@ -90,10 +104,29 @@ int _taskDurationSecondsFromTaskResponse(
     return estimatedMinutes * 60;
   }
 
-  final metadataDuration = _metadataInt(
-    task.metadata,
-    "default_duration_seconds",
-  );
+  final metadataDuration =
+      _metadataInt(task.metadata, "default_duration_seconds") ??
+      _metadataInt(task.metadata, "defaultDurationSeconds") ??
+      _nestedMetadataInt(
+        task.metadata,
+        "client_metadata",
+        "default_duration_seconds",
+      ) ??
+      _nestedMetadataInt(
+        task.metadata,
+        "client_metadata",
+        "defaultDurationSeconds",
+      ) ??
+      _nestedMetadataInt(
+        task.metadata,
+        "edited_fields",
+        "default_duration_seconds",
+      ) ??
+      _nestedMetadataInt(
+        task.metadata,
+        "edited_fields",
+        "defaultDurationSeconds",
+      );
   if (metadataDuration != null && metadataDuration > 0) {
     return metadataDuration;
   }
@@ -107,26 +140,51 @@ int _taskDurationSecondsFromTaskResponse(
 String? _metadataString(Map<String, dynamic> metadata, String key) {
   final value = metadata[key];
   if (value is String && value.trim().isNotEmpty) {
-    return value;
+    return value.trim();
+  }
+  return null;
+}
+
+String? _nestedMetadataString(
+  Map<String, dynamic> metadata,
+  String objectKey,
+  String key,
+) {
+  final nested = metadata[objectKey];
+  if (nested is Map) {
+    final value = nested[key];
+    if (value is String && value.trim().isNotEmpty) {
+      return value.trim();
+    }
   }
   return null;
 }
 
 int? _metadataInt(Map<String, dynamic> metadata, String key) {
-  final value = metadata[key];
+  return _readInt(metadata[key]);
+}
+
+int? _nestedMetadataInt(
+  Map<String, dynamic> metadata,
+  String objectKey,
+  String key,
+) {
+  final nested = metadata[objectKey];
+  if (nested is Map) {
+    return _readInt(nested[key]);
+  }
+  return null;
+}
+
+int? _readInt(Object? value) {
   if (value is int) {
     return value;
   }
   if (value is num) {
     return value.toInt();
   }
+  if (value is String) {
+    return int.tryParse(value.trim());
+  }
   return null;
-}
-
-int _expForQuestDifficulty(String difficulty) {
-  return switch (difficulty) {
-    "쉬움" => 30,
-    "보통" => 50,
-    _ => 100,
-  };
 }

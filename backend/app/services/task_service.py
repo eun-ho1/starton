@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from inspect import Parameter, signature
 from datetime import datetime
 from typing import Any
 
@@ -49,12 +50,65 @@ class TaskService:
 
     def list_active_tasks(self, *, user_id: str) -> list[TaskResponse]:
         try:
-            return self._task_repository.list_active(user_id=user_id)
+            tasks = self._task_repository.list_active(user_id=user_id)
+            return [
+                self._with_raw_input_metadata(user_id=user_id, task=task)
+                for task in tasks
+            ]
         except Exception as error:
             raise TaskServiceError(
                 "task_list_failed",
                 "Failed to load tasks for the current user.",
             ) from error
+
+    def update_task_progress(
+        self,
+        *,
+        user_id: str,
+        task_id: str,
+        elapsed_seconds: int,
+    ) -> TaskResponse:
+        try:
+            task = self._task_repository.update_progress(
+                user_id=user_id,
+                task_id=task_id,
+                elapsed_seconds=elapsed_seconds,
+            )
+            return self._with_raw_input_metadata(user_id=user_id, task=task)
+        except ValueError as error:
+            raise TaskServiceError(
+                "task_not_found",
+                "Task was not found.",
+            ) from error
+        except Exception as error:
+            raise TaskServiceError(
+                "task_progress_update_failed",
+                "Failed to update task progress.",
+            ) from error
+
+    def _with_raw_input_metadata(
+        self,
+        *,
+        user_id: str,
+        task: TaskResponse,
+    ) -> TaskResponse:
+        task_metadata = _expanded_task_metadata(dict(task.metadata))
+        if task.raw_input_id is not None:
+            try:
+                raw_input = self._raw_input_repository.get(
+                    user_id=user_id,
+                    raw_input_id=str(task.raw_input_id),
+                )
+                existing_client_metadata = task_metadata.get("client_metadata")
+                if isinstance(existing_client_metadata, dict):
+                    existing_client_metadata.update(raw_input.client_metadata)
+                else:
+                    task_metadata["client_metadata"] = dict(raw_input.client_metadata)
+                for key, value in raw_input.client_metadata.items():
+                    task_metadata.setdefault(key, value)
+            except Exception:
+                pass
+        return task.model_copy(update={"metadata": task_metadata})
 
     def complete_task(
         self,
@@ -77,6 +131,8 @@ class TaskService:
                 "Failed to load the task for completion.",
             ) from error
 
+        task = self._with_raw_input_metadata(user_id=user_id, task=task)
+
         if str(task.status) == TaskStatus.DONE.value or task.completed_at is not None:
             raise TaskServiceError(
                 "task_already_completed",
@@ -98,16 +154,6 @@ class TaskService:
             ) from error
 
         task_metadata = dict(task.metadata)
-        if task.raw_input_id is not None:
-            try:
-                raw_input = self._raw_input_repository.get(
-                    user_id=user_id,
-                    raw_input_id=str(task.raw_input_id),
-                )
-                for key, value in raw_input.client_metadata.items():
-                    task_metadata.setdefault(key, value)
-            except Exception:
-                pass
 
         completed_at = datetime.now(service_timezone())
         today_key_value = date_key(completed_at)
@@ -125,9 +171,9 @@ class TaskService:
         category = _task_category(task_metadata)
         earned_exp = _task_exp(task.difficulty, task_metadata)
         recorded_elapsed_seconds = _task_elapsed_seconds(
-            elapsed_seconds,
-            task.estimated_minutes,
-            task_metadata,
+            elapsed_seconds=elapsed_seconds,
+            stored_elapsed_seconds=task.elapsed_seconds,
+            metadata=task_metadata,
         )
         quest_record = QuestRecord(
             id=str(task.id),
@@ -216,10 +262,11 @@ class TaskService:
                 weekly_reset_key=profile.weekly_reset_key,
                 monthly_reset_key=profile.monthly_reset_key,
             )
-            self._task_repository.mark_completed(
+            self._mark_task_completed(
                 user_id=user_id,
                 task_id=task_id,
                 completed_at=completed_at,
+                elapsed_seconds=recorded_elapsed_seconds,
             )
             return completed_record
         except ValueError as error:
@@ -232,6 +279,42 @@ class TaskService:
                 "task_complete_failed",
                 "Failed to complete the task and update related records.",
             ) from error
+
+    def _mark_task_completed(
+        self,
+        *,
+        user_id: str,
+        task_id: str,
+        completed_at: datetime,
+        elapsed_seconds: int,
+    ) -> None:
+        mark_completed = self._task_repository.mark_completed
+        try:
+            parameters = signature(mark_completed).parameters
+        except (TypeError, ValueError):
+            parameters = {}
+
+        accepts_elapsed_seconds = (
+            "elapsed_seconds" in parameters
+            or any(
+                parameter.kind == Parameter.VAR_KEYWORD
+                for parameter in parameters.values()
+            )
+        )
+        if accepts_elapsed_seconds:
+            mark_completed(
+                user_id=user_id,
+                task_id=task_id,
+                completed_at=completed_at,
+                elapsed_seconds=elapsed_seconds,
+            )
+            return
+
+        mark_completed(
+            user_id=user_id,
+            task_id=task_id,
+            completed_at=completed_at,
+        )
 
 
 def _quest_difficulty_from_task(difficulty: str | None) -> str:
@@ -246,13 +329,9 @@ def _quest_difficulty_from_task(difficulty: str | None) -> str:
 
 
 def _task_exp(difficulty: str | None, metadata: dict[str, Any]) -> int:
-    metadata_exp = metadata.get("exp")
-    if isinstance(metadata_exp, bool):
-        metadata_exp = int(metadata_exp)
-    if isinstance(metadata_exp, int) and metadata_exp >= 0:
+    metadata_exp = _metadata_int(metadata, "exp")
+    if metadata_exp is not None and metadata_exp >= 0:
         return metadata_exp
-    if isinstance(metadata_exp, float) and metadata_exp >= 0:
-        return int(metadata_exp)
     return {
         "low": 30,
         "easy": 30,
@@ -264,29 +343,25 @@ def _task_exp(difficulty: str | None, metadata: dict[str, Any]) -> int:
 
 
 def _task_category(metadata: dict[str, Any]) -> str:
-    value = str(metadata.get("category") or "").strip().lower()
+    value = str(_metadata_value(metadata, "category") or "").strip().lower()
     if value in {"work", "life", "study", "home"}:
         return value
     return "work"
 
 
 def _task_elapsed_seconds(
+    *,
     elapsed_seconds: int,
-    estimated_minutes: int | None,
+    stored_elapsed_seconds: int,
     metadata: dict[str, Any],
 ) -> int:
-    if elapsed_seconds > 0:
-        return elapsed_seconds
-    if isinstance(estimated_minutes, int) and estimated_minutes > 0:
-        return estimated_minutes * 60
-    metadata_duration = metadata.get("default_duration_seconds")
-    if isinstance(metadata_duration, bool):
-        metadata_duration = int(metadata_duration)
-    if isinstance(metadata_duration, int) and metadata_duration > 0:
-        return metadata_duration
-    if isinstance(metadata_duration, float) and metadata_duration > 0:
-        return int(metadata_duration)
-    return 0
+    candidates = [
+        elapsed_seconds,
+        stored_elapsed_seconds,
+        _metadata_int(metadata, "elapsed_seconds") or 0,
+        _metadata_int(metadata, "elapsedSeconds") or 0,
+    ]
+    return max(0, max(candidates))
 
 
 def _task_default_duration_seconds(
@@ -295,11 +370,46 @@ def _task_default_duration_seconds(
 ) -> int:
     if isinstance(estimated_minutes, int) and estimated_minutes > 0:
         return estimated_minutes * 60
-    metadata_duration = metadata.get("default_duration_seconds")
-    if isinstance(metadata_duration, bool):
-        metadata_duration = int(metadata_duration)
-    if isinstance(metadata_duration, int) and metadata_duration > 0:
+    metadata_duration = _metadata_int(metadata, "default_duration_seconds")
+    if metadata_duration is not None and metadata_duration > 0:
         return metadata_duration
-    if isinstance(metadata_duration, float) and metadata_duration > 0:
-        return int(metadata_duration)
+    metadata_duration = _metadata_int(metadata, "defaultDurationSeconds")
+    if metadata_duration is not None and metadata_duration > 0:
+        return metadata_duration
     return 0
+
+
+def _expanded_task_metadata(metadata: dict[str, Any]) -> dict[str, Any]:
+    expanded = dict(metadata)
+    for key in ("client_metadata", "edited_fields"):
+        nested = expanded.get(key)
+        if isinstance(nested, dict):
+            for nested_key, nested_value in nested.items():
+                expanded.setdefault(nested_key, nested_value)
+    return expanded
+
+
+def _metadata_value(metadata: dict[str, Any], key: str) -> Any:
+    if key in metadata:
+        return metadata.get(key)
+    for object_key in ("client_metadata", "edited_fields"):
+        nested = metadata.get(object_key)
+        if isinstance(nested, dict) and key in nested:
+            return nested.get(key)
+    return None
+
+
+def _metadata_int(metadata: dict[str, Any], key: str) -> int | None:
+    value = _metadata_value(metadata, key)
+    if isinstance(value, bool):
+        return int(value)
+    if isinstance(value, int):
+        return value
+    if isinstance(value, float):
+        return int(value)
+    if isinstance(value, str):
+        try:
+            return int(value.strip())
+        except ValueError:
+            return None
+    return None

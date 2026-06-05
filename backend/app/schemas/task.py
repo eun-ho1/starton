@@ -69,6 +69,7 @@ class TaskResponse(BaseModel):
     priority: TaskPriority | None = Field(default=None)
     due_at: datetime | None = Field(default=None)
     estimated_minutes: int | None = Field(default=None, ge=0)
+    elapsed_seconds: int = Field(default=0, ge=0)
     energy_required: TaskEnergyRequired | None = Field(default=None)
     difficulty: TaskDifficulty | None = Field(default=None)
     next_action: str | None = Field(default=None)
@@ -79,6 +80,10 @@ class TaskResponse(BaseModel):
     created_at: datetime | None = Field(default=None)
     updated_at: datetime | None = Field(default=None)
     completed_at: datetime | None = Field(default=None)
+
+
+class TaskProgressUpdateRequest(BaseModel):
+    elapsed_seconds: int = Field(default=0, ge=0)
 
 
 class TaskCreateFromCandidateRequest(BaseModel):

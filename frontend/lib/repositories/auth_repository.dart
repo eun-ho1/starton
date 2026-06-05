@@ -30,9 +30,7 @@ class AuthRepository {
     );
   }
 
-  Future<AuthSessionResponse> refreshSession({
-    required String refreshToken,
-  }) {
+  Future<AuthSessionResponse> refreshSession({required String refreshToken}) {
     return _refresh(refreshToken: refreshToken);
   }
 
@@ -49,9 +47,7 @@ class AuthRepository {
     return _requireSession(response);
   }
 
-  Future<AuthSessionResponse> _refresh({
-    required String refreshToken,
-  }) async {
+  Future<AuthSessionResponse> _refresh({required String refreshToken}) async {
     final response = await _apiClient.postResponse<AuthSessionResponse>(
       '/auth/refresh',
       body: {'refreshToken': refreshToken.trim()},

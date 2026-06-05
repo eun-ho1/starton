@@ -54,9 +54,11 @@ class TaskCommitService:
         *,
         task_candidate_repository: Any,
         task_repository: Any,
+        raw_input_repository: Any | None = None,
     ) -> None:
         self._task_candidate_repository = task_candidate_repository
         self._task_repository = task_repository
+        self._raw_input_repository = raw_input_repository
 
     def commit_candidate(
         self,
@@ -157,6 +159,18 @@ class TaskCommitService:
         selected_subtask_ids: list[str],
         selected_reminder_ids: list[str],
     ) -> TaskResponse:
+        client_metadata = _client_metadata_from_candidate(candidate)
+        raw_input_repository = self._raw_input_repository
+        if raw_input_repository is not None:
+            try:
+                raw_input = raw_input_repository.get(
+                    user_id=user_id,
+                    raw_input_id=str(candidate.raw_input_id),
+                )
+                client_metadata.update(raw_input.client_metadata)
+            except Exception:
+                pass
+
         payload = {
             "user_id": user_id,
             "profile_id": profile_id,
@@ -175,12 +189,14 @@ class TaskCommitService:
             "difficulty": _enum_value(candidate.difficulty),
             "next_action": candidate.next_action,
             "source": _candidate_source(candidate),
-            "metadata": {
-                "committed_from": "task_candidate",
-                "edited_fields": _json_safe(edited_fields),
-                "selected_subtask_ids": selected_subtask_ids,
-                "selected_reminder_ids": selected_reminder_ids,
-            },
+            "metadata": _json_safe(
+                _task_metadata_for_commit(
+                    client_metadata=client_metadata,
+                    edited_fields=edited_fields,
+                    selected_subtask_ids=selected_subtask_ids,
+                    selected_reminder_ids=selected_reminder_ids,
+                )
+            ),
         }
         payload.update(_json_safe(edited_fields))
         if not str(payload.get("title") or "").strip():
@@ -189,6 +205,50 @@ class TaskCommitService:
                 "Task title must not be empty.",
             )
         return self._task_repository.create_task(payload)
+
+
+def _client_metadata_from_candidate(candidate: TaskCandidateResponse) -> dict[str, Any]:
+    metadata: dict[str, Any] = {}
+    candidate_metadata = candidate.model_payload.get("client_metadata")
+    if isinstance(candidate_metadata, dict):
+        metadata.update(candidate_metadata)
+
+    raw_input = candidate.model_payload.get("raw_input")
+    if isinstance(raw_input, dict):
+        raw_metadata = raw_input.get("client_metadata")
+        if isinstance(raw_metadata, dict):
+            metadata.update(raw_metadata)
+
+    return metadata
+
+
+def _task_metadata_for_commit(
+    *,
+    client_metadata: dict[str, Any],
+    edited_fields: dict[str, Any],
+    selected_subtask_ids: list[str],
+    selected_reminder_ids: list[str],
+) -> dict[str, Any]:
+    metadata: dict[str, Any] = {
+        "committed_from": "task_candidate",
+        "client_metadata": _json_safe(client_metadata),
+        "edited_fields": _json_safe(edited_fields),
+        "selected_subtask_ids": selected_subtask_ids,
+        "selected_reminder_ids": selected_reminder_ids,
+    }
+    for key in (
+        "category",
+        "exp",
+        "default_duration_seconds",
+        "defaultDurationSeconds",
+        "elapsed_seconds",
+        "elapsedSeconds",
+        "subtask_generation_prompt",
+    ):
+        value = client_metadata.get(key)
+        if value is not None:
+            metadata[key] = value
+    return metadata
 
 
 def _validated_edited_fields(edited_fields: dict[str, Any]) -> dict[str, Any]:

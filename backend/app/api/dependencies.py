@@ -139,6 +139,7 @@ def get_task_commit_service() -> TaskCommitService:
     return TaskCommitService(
         task_candidate_repository=get_task_candidate_repository(),
         task_repository=get_task_repository(),
+        raw_input_repository=get_raw_input_repository(),
     )
 
 

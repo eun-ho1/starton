@@ -18,8 +18,9 @@ from app.schemas.task import (
 
 _TASK_COLUMNS = (
     "id, user_id, profile_id, candidate_id, raw_input_id, mediator_run_id, title, "
-    "description, status, priority, due_at, estimated_minutes, energy_required, "
-    "difficulty, next_action, source, metadata, created_at, updated_at, completed_at"
+    "description, status, priority, due_at, estimated_minutes, elapsed_seconds, "
+    "energy_required, difficulty, next_action, source, metadata, created_at, "
+    "updated_at, completed_at"
 )
 _SUBTASK_COLUMNS = (
     "id, task_id, user_id, candidate_subtask_id, title, order_index, "
@@ -52,8 +53,13 @@ class SupabaseTaskRepository:
             .order("created_at", desc=True)
             .execute()
         )
+        completed_task_ids = _completed_task_ids(self._client, user_id)
         tasks: list[TaskResponse] = []
         for task_row in response.data or []:
+            if task_row.get("completed_at") is not None:
+                continue
+            if str(task_row.get("id") or "") in completed_task_ids:
+                continue
             tasks.append(
                 _map_task_response(
                     task_row,
@@ -157,22 +163,61 @@ class SupabaseTaskRepository:
         )
         return [_map_reminder_response(row) for row in _sort_reminder_rows(response.data or [])]
 
+    def update_progress(
+        self,
+        *,
+        user_id: str,
+        task_id: str,
+        elapsed_seconds: int,
+    ) -> TaskResponse:
+        payload = {"elapsed_seconds": max(0, int(elapsed_seconds or 0))}
+        response = (
+            self._client.table("tasks")
+            .update(payload)
+            .eq("user_id", user_id)
+            .eq("id", task_id)
+            .in_(
+                "status",
+                [
+                    TaskStatus.TODO.value,
+                    TaskStatus.DOING.value,
+                    TaskStatus.PAUSED.value,
+                ],
+            )
+            .execute()
+        )
+        _ensure_mutation_succeeded(
+            response,
+            "Task progress update did not affect any rows.",
+        )
+        return self.get(user_id=user_id, task_id=task_id)
+
     def mark_completed(
         self,
         *,
         user_id: str,
         task_id: str,
         completed_at: datetime,
+        elapsed_seconds: int = 0,
     ) -> TaskResponse:
         payload = {
             "status": TaskStatus.DONE.value,
             "completed_at": completed_at.isoformat(),
+            "elapsed_seconds": max(0, int(elapsed_seconds or 0)),
         }
         response = (
             self._client.table("tasks")
             .update(payload)
             .eq("user_id", user_id)
             .eq("id", task_id)
+            .in_(
+                "status",
+                [
+                    TaskStatus.TODO.value,
+                    TaskStatus.DOING.value,
+                    TaskStatus.PAUSED.value,
+                ],
+            )
             .execute()
         )
         _ensure_mutation_succeeded(
@@ -236,6 +281,26 @@ class SupabaseTaskRepository:
         return _sort_reminder_rows(response.data or [])
 
 
+def _completed_task_ids(client: Any, user_id: str) -> set[str]:
+    try:
+        response = (
+            client.table("completed_quests")
+            .select("task_id, client_quest_id")
+            .eq("user_id", user_id)
+            .execute()
+        )
+    except Exception:
+        return set()
+
+    completed_ids: set[str] = set()
+    for row in response.data or []:
+        for key in ("task_id", "client_quest_id"):
+            value = row.get(key)
+            if value is not None and str(value).strip():
+                completed_ids.add(str(value))
+    return completed_ids
+
+
 def _map_task_response(
     row: dict[str, Any],
     *,
@@ -254,6 +319,7 @@ def _map_task_response(
         priority=row.get("priority"),
         due_at=row.get("due_at"),
         estimated_minutes=row.get("estimated_minutes"),
+        elapsed_seconds=row.get("elapsed_seconds") or 0,
         energy_required=row.get("energy_required"),
         difficulty=row.get("difficulty"),
         next_action=row.get("next_action"),
