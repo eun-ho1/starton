@@ -25,6 +25,9 @@ SUPABASE_URL=https://your-project-ref.supabase.co
 SUPABASE_SERVICE_ROLE_KEY=your-supabase-service-role-key
 SUPABASE_ANON_KEY=your-supabase-anon-key
 GEMINI_API_KEY=your-gemini-api-key
+GEMINI_MODEL_NAME=gemini-3.5-flash
+GEMINI_THINKING_LEVEL=low
+GEMINI_MAX_OUTPUT_TOKENS=2048
 NOTION_TOKEN_ENCRYPTION_KEY=your-fernet-key-generated-by-cryptography-fernet
 ```
 
@@ -44,6 +47,13 @@ python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().d
 
 Optional unless you use the related feature:
 - `GEMINI_API_KEY`
+- `GEMINI_MODEL_NAME` (default: `gemini-3.5-flash`)
+- `GEMINI_THINKING_LEVEL` (default: `low`; set empty to use the model default)
+- `GEMINI_MAX_OUTPUT_TOKENS` (default: `2048`)
+
+For the AI task suggestion flow, keep `GEMINI_MODEL_NAME` on a stable model such as
+`gemini-3.5-flash` unless you intentionally want to test a preview model. Lower
+`GEMINI_THINKING_LEVEL` values reduce latency for short task-planning prompts.
 
 Notion tokens are encrypted before being stored on the server.
 

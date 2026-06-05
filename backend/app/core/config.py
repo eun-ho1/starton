@@ -45,6 +45,20 @@ class Settings(BaseSettings):
     )
     supabase_anon_key: str | None = Field(default=None, alias="SUPABASE_ANON_KEY")
     gemini_api_key: str | None = Field(default=None, alias="GEMINI_API_KEY")
+    gemini_model_name: str = Field(
+        default="gemini-3.5-flash",
+        alias="GEMINI_MODEL_NAME",
+    )
+    gemini_max_output_tokens: int = Field(
+        default=2048,
+        ge=256,
+        le=8192,
+        alias="GEMINI_MAX_OUTPUT_TOKENS",
+    )
+    gemini_thinking_level: str | None = Field(
+        default="low",
+        alias="GEMINI_THINKING_LEVEL",
+    )
     notion_token_encryption_key: str | None = Field(
         default=None,
         alias="NOTION_TOKEN_ENCRYPTION_KEY",

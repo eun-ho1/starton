@@ -138,20 +138,30 @@ class QuestItem {
           json['id'] as String? ??
           DateTime.now().microsecondsSinceEpoch.toString(),
       title: json['title'] as String? ?? '',
-      exp: json['exp'] as int? ?? 0,
+      exp: _readJsonInt(json['exp']) ?? 0,
       difficulty: difficulty,
       category: normalizeQuestCategory(json['category'] as String?),
-      elapsedSeconds: json['elapsedSeconds'] as int? ?? 0,
+      elapsedSeconds:
+          _readJsonInt(json['elapsedSeconds']) ??
+          _readJsonInt(json['elapsed_seconds']) ??
+          0,
       defaultDurationSeconds:
-          json['defaultDurationSeconds'] as int? ??
+          _readJsonInt(json['defaultDurationSeconds']) ??
+          _readJsonInt(json['default_duration_seconds']) ??
           defaultQuestDurationSecondsForDifficulty(difficulty),
       dueDate: rawDueDate == null
           ? null
           : normalizeQuestDueDate(DateTime.tryParse(rawDueDate)),
       subtasks: _questSubtasksFromJson(json['subtasks']),
-      activeSubtaskId: json['activeSubtaskId'] as String?,
-      aiSubtaskPrompt: json['aiSubtaskPrompt'] as String?,
-      syncTarget: normalizeQuestSyncTarget(json['syncTarget'] as String?),
+      activeSubtaskId:
+          (json['activeSubtaskId'] as String?) ??
+          (json['active_subtask_id'] as String?),
+      aiSubtaskPrompt:
+          (json['aiSubtaskPrompt'] as String?) ??
+          (json['ai_subtask_prompt'] as String?),
+      syncTarget: normalizeQuestSyncTarget(
+        (json['syncTarget'] as String?) ?? (json['sync_target'] as String?),
+      ),
     );
   }
 
@@ -276,19 +286,33 @@ class QuestSubtask {
   }
 
   factory QuestSubtask.fromJson(Map<String, dynamic> json) {
-    final rawCompletedAt = json['completedAt'] as String?;
+    final rawCompletedAt =
+        (json['completedAt'] as String?) ?? (json['completed_at'] as String?);
     return QuestSubtask(
       id: json['id'] as String? ?? '',
       title: json['title'] as String? ?? '',
-      orderIndex: _readJsonInt(json['orderIndex']) ?? 0,
-      estimatedMinutes: _readJsonInt(json['estimatedMinutes']),
+      orderIndex:
+          _readJsonInt(json['orderIndex']) ??
+          _readJsonInt(json['order_index']) ??
+          0,
+      estimatedMinutes:
+          _readJsonInt(json['estimatedMinutes']) ??
+          _readJsonInt(json['estimated_minutes']),
       status: json['status'] as String? ?? 'todo',
-      isNextAction: json['isNextAction'] as bool? ?? false,
-      energyRequired: json['energyRequired'] as String?,
+      isNextAction:
+          json['isNextAction'] as bool? ??
+          json['is_next_action'] as bool? ??
+          false,
+      energyRequired:
+          (json['energyRequired'] as String?) ??
+          (json['energy_required'] as String?),
       completedAt: rawCompletedAt == null
           ? null
           : DateTime.tryParse(rawCompletedAt),
-      elapsedSeconds: _readJsonInt(json['elapsedSeconds']) ?? 0,
+      elapsedSeconds:
+          _readJsonInt(json['elapsedSeconds']) ??
+          _readJsonInt(json['elapsed_seconds']) ??
+          0,
     );
   }
 }
@@ -310,6 +334,9 @@ int? _readJsonInt(Object? value) {
   }
   if (value is num) {
     return value.toInt();
+  }
+  if (value is String) {
+    return int.tryParse(value.trim());
   }
   return null;
 }

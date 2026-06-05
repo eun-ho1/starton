@@ -354,6 +354,7 @@ class TaskCandidateRouteTest(unittest.TestCase):
             ("invalid_reminder_selection", 400),
             ("candidate_already_committed", 409),
             ("candidate_not_committable", 409),
+            ("task_storage_unavailable", 503),
         ]
 
         for code, expected_status in cases:

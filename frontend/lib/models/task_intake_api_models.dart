@@ -420,6 +420,7 @@ class TaskResponse {
     required this.difficulty,
     required this.nextAction,
     required this.source,
+    this.elapsedSeconds,
     required this.metadata,
     required this.subtasks,
     required this.reminders,
@@ -446,6 +447,9 @@ class TaskResponse {
       difficulty: _readOptionalString(object, 'difficulty'),
       nextAction: _readOptionalString(object, 'next_action'),
       source: _readOptionalString(object, 'source') ?? 'ai',
+      elapsedSeconds:
+          _readOptionalInt(object, 'elapsed_seconds') ??
+          _readOptionalInt(object, 'elapsedSeconds'),
       metadata: _readMap(object, 'metadata'),
       subtasks: _readList(object, 'subtasks', SubtaskResponse.fromJson),
       reminders: _readList(object, 'reminders', ReminderResponse.fromJson),
@@ -470,12 +474,16 @@ class TaskResponse {
   final String? difficulty;
   final String? nextAction;
   final String source;
+  final int? elapsedSeconds;
   final Map<String, dynamic> metadata;
   final List<SubtaskResponse> subtasks;
   final List<ReminderResponse> reminders;
   final DateTime? createdAt;
   final DateTime? updatedAt;
   final DateTime? completedAt;
+
+  bool get isCompleted =>
+      status.trim().toLowerCase() == 'done' || completedAt != null;
 
   Map<String, dynamic> toJson() {
     return {
@@ -494,6 +502,7 @@ class TaskResponse {
       'difficulty': difficulty,
       'next_action': nextAction,
       'source': source,
+      'elapsed_seconds': elapsedSeconds,
       'metadata': Map<String, dynamic>.from(metadata),
       'subtasks': subtasks.map((subtask) => subtask.toJson()).toList(),
       'reminders': reminders.map((reminder) => reminder.toJson()).toList(),
@@ -556,6 +565,9 @@ class SubtaskResponse {
   final DateTime? createdAt;
   final DateTime? updatedAt;
   final DateTime? completedAt;
+
+  bool get isCompleted =>
+      status.trim().toLowerCase() == 'done' || completedAt != null;
 
   Map<String, dynamic> toJson() {
     return {
@@ -698,7 +710,13 @@ int? _readOptionalInt(Map<String, dynamic> json, String key) {
   if (value is num) {
     return value.toInt();
   }
-  throw FormatException('$key must be a number or null.');
+  if (value is String) {
+    final parsed = int.tryParse(value.trim());
+    if (parsed != null) {
+      return parsed;
+    }
+  }
+  throw FormatException('$key must be a number or numeric string or null.');
 }
 
 double? _readOptionalDouble(Map<String, dynamic> json, String key) {

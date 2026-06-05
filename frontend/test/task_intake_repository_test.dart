@@ -38,6 +38,23 @@ void main() {
     expect(response.candidateId, 'candidate-1');
   });
 
+  test('listTasks loads active tasks endpoint', () async {
+    final apiClient = _FakeTaskIntakeApiClient(
+      ApiResponse<List<TaskResponse>>(
+        success: true,
+        data: [_commitResult().task],
+        error: null,
+      ),
+    );
+    final repository = TaskIntakeRepository(apiClient: apiClient);
+
+    final tasks = await repository.listTasks();
+
+    expect(apiClient.requests.single.method, 'GET');
+    expect(apiClient.requests.single.path, '/tasks');
+    expect(tasks.single.id, 'task-1');
+  });
+
   test('getCandidate calls encoded task candidate endpoint', () async {
     final apiClient = _FakeTaskIntakeApiClient(
       ApiResponse<TaskCandidateResponse>(

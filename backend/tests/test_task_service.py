@@ -6,7 +6,7 @@ from app.repositories.base import ProfileState, QuestRecord, StatsState
 from app.schemas.quest import CompletedQuestRecordSchema
 from app.schemas.task import TaskResponse, TaskStatus
 from app.schemas.task_candidate import TaskDifficulty
-from app.services.task_service import TaskService
+from app.services.task_service import TaskService, TaskServiceError
 
 
 USER_ID = "00000000-0000-4000-8000-000000000001"
@@ -38,9 +38,22 @@ def make_task() -> TaskResponse:
 
 
 class FakeTaskRepository:
-    def __init__(self, task: TaskResponse) -> None:
+    def __init__(
+        self,
+        task: TaskResponse,
+        *,
+        list_error: Exception | None = None,
+    ) -> None:
         self.task = task
+        self.list_error = list_error
+        self.list_active_calls: list[dict[str, Any]] = []
         self.mark_completed_calls: list[dict[str, Any]] = []
+
+    def list_active(self, *, user_id: str) -> list[TaskResponse]:
+        self.list_active_calls.append({"user_id": user_id})
+        if self.list_error is not None:
+            raise self.list_error
+        return [self.task]
 
     def get(self, *, user_id: str, task_id: str) -> TaskResponse:
         return self.task
@@ -153,6 +166,42 @@ class FakeStatsRepository:
 
 
 class TaskServiceTest(unittest.TestCase):
+    def test_list_active_tasks_returns_repository_tasks(self) -> None:
+        task_repository = FakeTaskRepository(make_task())
+        service = TaskService(
+            task_repository=task_repository,
+            raw_input_repository=FakeRawInputRepository(),
+            completed_quest_repository=FakeCompletedQuestRepository(),
+            profile_repository=FakeProfileRepository(),
+            stats_repository=FakeStatsRepository(),
+        )
+
+        result = service.list_active_tasks(user_id=USER_ID)
+
+        self.assertEqual(result, [task_repository.task])
+        self.assertEqual(task_repository.list_active_calls, [{"user_id": USER_ID}])
+
+    def test_list_active_tasks_maps_repository_error(self) -> None:
+        service = TaskService(
+            task_repository=FakeTaskRepository(
+                make_task(),
+                list_error=RuntimeError("database unavailable"),
+            ),
+            raw_input_repository=FakeRawInputRepository(),
+            completed_quest_repository=FakeCompletedQuestRepository(),
+            profile_repository=FakeProfileRepository(),
+            stats_repository=FakeStatsRepository(),
+        )
+
+        with self.assertRaises(TaskServiceError) as context:
+            service.list_active_tasks(user_id=USER_ID)
+
+        self.assertEqual(context.exception.code, "task_list_failed")
+        self.assertEqual(
+            context.exception.message,
+            "Failed to load tasks for the current user.",
+        )
+
     def test_complete_task_uses_task_completion_record_and_marks_task_done(self) -> None:
         task_repository = FakeTaskRepository(make_task())
         completed_repository = FakeCompletedQuestRepository()

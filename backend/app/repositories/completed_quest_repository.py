@@ -115,7 +115,12 @@ def _single_row(response: Any) -> dict[str, Any]:
 
 def _map_completed_row(row: dict[str, Any]) -> CompletedQuestRecordSchema:
     return CompletedQuestRecordSchema(
-        questId=row.get("client_quest_id") or row.get("quest_id") or "",
+        questId=(
+            row.get("client_quest_id")
+            or row.get("quest_id")
+            or row.get("task_id")
+            or ""
+        ),
         title=row["title"],
         difficulty=row["difficulty"],
         category=row["category"],

@@ -4,8 +4,11 @@ import 'package:start_on/models/task_intake_api_models.dart';
 import 'package:start_on/services/api_client.dart';
 
 class TaskIntakeRepository {
+  static const Duration aiRequestTimeout = Duration(seconds: 75);
+
   TaskIntakeRepository({ApiClient? apiClient})
-    : _apiClient = apiClient ?? ApiClient.authenticated(),
+    : _apiClient =
+          apiClient ?? ApiClient.authenticated(timeout: aiRequestTimeout),
       _ownsApiClient = apiClient == null;
 
   final ApiClient _apiClient;
@@ -22,6 +25,19 @@ class TaskIntakeRepository {
       response,
       code: 'missing_task_intake',
       message: 'Server response did not include task intake data.',
+    );
+  }
+
+  Future<List<TaskResponse>> listTasks() async {
+    final response = await _apiClient.getResponse<List<TaskResponse>>(
+      '/tasks',
+      parseData: _parseTaskList,
+    );
+
+    return _requireData(
+      response,
+      code: 'missing_task_list',
+      message: 'Server response did not include a task list.',
     );
   }
 
@@ -89,6 +105,23 @@ class TaskIntakeRepository {
     );
   }
 
+  Future<TaskResponse> updateTaskProgress(
+    String taskId, {
+    required int elapsedSeconds,
+  }) async {
+    final response = await _apiClient.patchResponse<TaskResponse>(
+      '/tasks/${Uri.encodeComponent(taskId)}/progress',
+      body: {'elapsed_seconds': elapsedSeconds < 0 ? 0 : elapsedSeconds},
+      parseData: TaskResponse.fromJson,
+    );
+
+    return _requireData(
+      response,
+      code: 'missing_updated_task',
+      message: 'Server response did not include the updated task.',
+    );
+  }
+
   Future<CompletedQuestRecordResponse> completeTask(
     String taskId, {
     required int elapsedSeconds,
@@ -115,6 +148,13 @@ class TaskIntakeRepository {
     if (_ownsApiClient) {
       _apiClient.close();
     }
+  }
+
+  List<TaskResponse> _parseTaskList(Object? json) {
+    if (json is! List) {
+      throw const FormatException('Task list must be a JSON array.');
+    }
+    return json.map(TaskResponse.fromJson).toList();
   }
 
   String _candidatePath(String candidateId) =>

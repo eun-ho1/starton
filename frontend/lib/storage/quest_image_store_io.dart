@@ -21,8 +21,9 @@ class QuestImageStore {
     }
 
     final extensionIndex = image.path.lastIndexOf('.');
-    final extension =
-        extensionIndex >= 0 ? image.path.substring(extensionIndex) : '.jpg';
+    final extension = extensionIndex >= 0
+        ? image.path.substring(extensionIndex)
+        : '.jpg';
     final timestamp = completedAt.microsecondsSinceEpoch;
     final savedFile = File(
       '${imageDirectory.path}${Platform.pathSeparator}quest_${questId}_$timestamp$extension',

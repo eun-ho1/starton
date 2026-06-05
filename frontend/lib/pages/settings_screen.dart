@@ -644,9 +644,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   void _closeSettings() {
-    Navigator.of(context).pop(
-      _didSyncNotionThisSession ? SettingsScreenResult.syncedNotion : null,
-    );
+    Navigator.of(
+      context,
+    ).pop(_didSyncNotionThisSession ? SettingsScreenResult.syncedNotion : null);
   }
 
   String get _notionSwitchSubtitle {
