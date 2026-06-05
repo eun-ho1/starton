@@ -1,6 +1,7 @@
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from starlette.concurrency import run_in_threadpool
 
 from app.api.dependencies import (
     get_current_user_id,
@@ -37,6 +38,7 @@ _TASK_COMMIT_ERROR_STATUSES = {
     "invalid_edited_fields": status.HTTP_400_BAD_REQUEST,
     "invalid_subtask_selection": status.HTTP_400_BAD_REQUEST,
     "invalid_reminder_selection": status.HTTP_400_BAD_REQUEST,
+    "task_storage_unavailable": status.HTTP_503_SERVICE_UNAVAILABLE,
 }
 _TASK_CANDIDATE_REVIEW_ERROR_STATUSES = {
     "candidate_not_found": status.HTTP_404_NOT_FOUND,
@@ -106,7 +108,8 @@ async def confirm_task_candidate(
     task_commit_service: TaskCommitService = Depends(get_task_commit_service),
 ) -> TaskConfirmApiResponse:
     try:
-        result = task_commit_service.commit_candidate(
+        result = await run_in_threadpool(
+            task_commit_service.commit_candidate,
             user_id=user_id,
             candidate_id=str(candidate_id),
             accepted=payload.accepted,

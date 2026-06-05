@@ -47,6 +47,19 @@ class SettingsValidationTest(unittest.TestCase):
         self.assertEqual(settings.supabase_anon_key, "anon-key")
         self.assertTrue(settings.notion_token_encryption_key)
 
+    def test_settings_default_ai_suggestion_gemini_options(self) -> None:
+        settings = Settings(
+            _env_file=None,
+            SUPABASE_URL="https://example.supabase.co",
+            SUPABASE_SERVICE_ROLE_KEY="service-role",
+            SUPABASE_ANON_KEY="anon-key",
+            NOTION_TOKEN_ENCRYPTION_KEY=self._valid_fernet_key(),
+        )
+
+        self.assertEqual(settings.gemini_model_name, "gemini-3.5-flash")
+        self.assertEqual(settings.gemini_thinking_level, "low")
+        self.assertEqual(settings.gemini_max_output_tokens, 2048)
+
     def test_settings_accept_railway_port_environment_variable(self) -> None:
         settings = Settings(
             _env_file=None,

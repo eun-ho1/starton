@@ -2101,6 +2101,24 @@ class _AdFocusShellState extends State<AdFocusShell>
     if (error is ApiClientException && error.statusCode == 429) {
       return 'AI 요청 한도에 도달했어요. 잠시 후 다시 시도해 주세요.';
     }
+    if (error is ApiClientException && error.code == 'request_timeout') {
+      return 'AI 제안 생성 시간이 길어지고 있어요. 네트워크를 확인한 뒤 다시 시도해 주세요.';
+    }
+    if (error is ApiClientException && error.statusCode == 504) {
+      return 'AI 서버 응답 시간이 초과됐어요. 잠시 후 다시 시도해 주세요.';
+    }
+    if (error is ApiClientException &&
+        error.code == 'task_storage_unavailable') {
+      return 'AI 제안 저장용 DB 테이블이 아직 적용되지 않았어요. Supabase 마이그레이션 0004~0008 적용을 확인해 주세요.';
+    }
+    if (error is TaskIntakeRepositoryException &&
+        error.code == 'task_storage_unavailable') {
+      return 'AI 제안 저장용 DB 테이블이 아직 적용되지 않았어요. Supabase 마이그레이션 0004~0008 적용을 확인해 주세요.';
+    }
+    if (error is ApiClientException &&
+        error.code == 'ai_provider_unavailable') {
+      return 'AI 서버 설정 문제가 있어요. 배포 환경변수를 확인해 주세요.';
+    }
     if (error is QuestRepositoryException && error.code == 'quest_not_found') {
       return '서버에서 퀘스트를 찾지 못했어요.';
     }

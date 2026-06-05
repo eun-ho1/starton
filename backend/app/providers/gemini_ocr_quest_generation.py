@@ -1,9 +1,6 @@
 import json
 from typing import Any
 
-from google import genai
-from google.genai import types
-
 from app.core.config import settings
 from app.providers.rule_based_quest_generation import RuleBasedQuestGenerationProvider
 from app.schemas.ai import OCRQuestCandidate
@@ -25,7 +22,8 @@ Return only valid JSON.
 
 class GeminiOCRQuestGenerationProvider:
     def __init__(self) -> None:
-        self._client = genai.Client(api_key=settings.gemini_api_key)
+        self._client = _build_genai_client(api_key=settings.gemini_api_key)
+        self._types = _build_genai_types()
         self._fallback = RuleBasedQuestGenerationProvider()
 
     def generate_candidates(
@@ -46,7 +44,7 @@ class GeminiOCRQuestGenerationProvider:
         response = self._client.models.generate_content(
             model=_MODEL_NAME,
             contents=prompt,
-            config=types.GenerateContentConfig(
+            config=self._types.GenerateContentConfig(
                 response_mime_type="application/json",
                 system_instruction=_SYSTEM_INSTRUCTION,
             ),
@@ -168,3 +166,22 @@ OCR reference text:
         if not candidates:
             raise ValueError("Gemini response did not produce any valid candidates.")
         return candidates
+
+def _build_genai_client(*, api_key: str | None) -> Any:
+    try:
+        from google import genai
+    except ModuleNotFoundError as error:
+        raise RuntimeError(
+            "google-genai is required to use GeminiOCRQuestGenerationProvider."
+        ) from error
+    return genai.Client(api_key=api_key)
+
+
+def _build_genai_types() -> Any:
+    try:
+        from google.genai import types
+    except ModuleNotFoundError as error:
+        raise RuntimeError(
+            "google-genai is required to use GeminiOCRQuestGenerationProvider."
+        ) from error
+    return types

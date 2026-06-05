@@ -210,6 +210,40 @@ class TaskIntakeRouteTest(unittest.TestCase):
             "AI provider rate limit exceeded. Please retry later.",
         )
 
+    def test_create_task_intake_maps_provider_timeout_to_504(self) -> None:
+        service = FakeIntakeService(error=RuntimeError("deadline exceeded"))
+        client = self.make_client(service)
+
+        response = client.post(
+            "/api/v1/task-intake",
+            json={"text": "과제 준비"},
+        )
+
+        self.assertEqual(response.status_code, 504)
+        detail = response.json()["detail"]
+        self.assertEqual(detail["code"], "ai_provider_timeout")
+        self.assertEqual(
+            detail["message"],
+            "AI provider response timed out. Please retry later.",
+        )
+
+    def test_create_task_intake_maps_provider_config_error_to_503(self) -> None:
+        service = FakeIntakeService(error=RuntimeError("GEMINI_API_KEY is required"))
+        client = self.make_client(service)
+
+        response = client.post(
+            "/api/v1/task-intake",
+            json={"text": "과제 준비"},
+        )
+
+        self.assertEqual(response.status_code, 503)
+        detail = response.json()["detail"]
+        self.assertEqual(detail["code"], "ai_provider_unavailable")
+        self.assertEqual(
+            detail["message"],
+            "AI provider is not configured correctly on the server.",
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

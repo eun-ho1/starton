@@ -28,12 +28,17 @@ SUPABASE_SERVICE_ROLE_KEY=your-supabase-service-role-key
 SUPABASE_ANON_KEY=your-supabase-anon-key
 NOTION_TOKEN_ENCRYPTION_KEY=your-fernet-key
 GEMINI_API_KEY=your-gemini-api-key
+GEMINI_MODEL_NAME=gemini-3.5-flash
+GEMINI_THINKING_LEVEL=low
+GEMINI_MAX_OUTPUT_TOKENS=2048
 ```
 
 Notes:
 
 - Railway injects `PORT` automatically. The backend now accepts `PORT` without extra config.
 - `GEMINI_API_KEY` is optional unless AI generation features are enabled.
+- For AI task suggestions, use the stable default `GEMINI_MODEL_NAME=gemini-3.5-flash`; switch it only when you deliberately test another supported Gemini model.
+- `GEMINI_THINKING_LEVEL=low` keeps short planning requests from spending unnecessary time on extra reasoning. Leave it empty if you want the model default.
 - `WEB_CORS_ALLOWED_ORIGINS` must include the real Vercel production URL. Add preview URLs only if you want preview deployments to call the live backend directly.
 
 ### 3. Verify the backend

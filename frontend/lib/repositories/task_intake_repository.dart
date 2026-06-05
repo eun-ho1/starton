@@ -4,8 +4,11 @@ import 'package:start_on/models/task_intake_api_models.dart';
 import 'package:start_on/services/api_client.dart';
 
 class TaskIntakeRepository {
+  static const Duration aiRequestTimeout = Duration(seconds: 75);
+
   TaskIntakeRepository({ApiClient? apiClient})
-    : _apiClient = apiClient ?? ApiClient.authenticated(),
+    : _apiClient =
+          apiClient ?? ApiClient.authenticated(timeout: aiRequestTimeout),
       _ownsApiClient = apiClient == null;
 
   final ApiClient _apiClient;
