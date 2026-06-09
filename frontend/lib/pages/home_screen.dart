@@ -98,7 +98,7 @@ class _HomeScreenState extends State<HomeScreen> {
           onEnergyTap: _openEnergyPicker,
           onOpenSettings: widget.onOpenSettings,
         ),
-        const SizedBox(height: 24),
+        const SizedBox(height: 12),
         HomeCategoryGrid(
           completedCategoryCounts: completedCategoryCounts,
           pendingCategoryCounts: pendingCategoryCounts,

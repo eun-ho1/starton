@@ -162,20 +162,20 @@ class HomeHeaderSection extends StatelessWidget {
         const SizedBox(height: 12),
         Row(
           children: [
+
             _HomeContextMetric(
               icon: Icons.battery_charging_full_rounded,
-              label: '에너지 ${_energyLabel(userEnergy)}',
               progress: _energyProgress(userEnergy),
               fillColor: _energyColor(userEnergy),
               onTap: onEnergyTap,
             ),
-            const SizedBox(width: 10),
+            SizedBox(width: 15,),
             _HomeContextMetric(
               icon: Icons.assignment_turned_in_rounded,
-              label: '$completedTodayCount/$totalTaskCount 완료',
               progress: completionProgress,
               fillColor: const Color(0xFF6F63FF),
             ),
+            SizedBox(width: 16,),
           ],
         ),
       ],
@@ -186,14 +186,12 @@ class HomeHeaderSection extends StatelessWidget {
 class _HomeContextMetric extends StatelessWidget {
   const _HomeContextMetric({
     required this.icon,
-    required this.label,
     required this.progress,
     required this.fillColor,
     this.onTap,
   });
 
   final IconData icon;
-  final String label;
   final double progress;
   final Color fillColor;
   final VoidCallback? onTap;
@@ -202,10 +200,12 @@ class _HomeContextMetric extends StatelessWidget {
   Widget build(BuildContext context) {
     final clampedProgress = progress.clamp(0.0, 1.0).toDouble();
 
-    return Expanded(
-      child: GestureDetector(
-        onTap: onTap,
-        behavior: HitTestBehavior.opaque,
+    return GestureDetector(
+      onTap: onTap,
+      behavior: HitTestBehavior.opaque,
+      child: SizedBox(
+        width: 30,
+        height: 30,
         child: neu.Neumorphic(
           style: neu.NeumorphicStyle(
             depth: 5,
@@ -214,28 +214,14 @@ class _HomeContextMetric extends StatelessWidget {
             color: const Color(0xFFF1F3F8),
             shadowLightColor: Colors.white,
             shadowDarkColor: const Color(0xFFD0D7E5),
-            boxShape: neu.NeumorphicBoxShape.roundRect(
-              BorderRadius.circular(14),
-            ),
+            boxShape: const neu.NeumorphicBoxShape.circle(),
           ),
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-          child: Row(
-            children: [
-              _FilledIcon(icon: icon, fillColor: fillColor, progress: clampedProgress),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  label,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: Color(0xFF33415C),
-                    fontSize: 12,
-                    fontWeight: FontWeight.w900,
-                  ),
-                ),
-              ),
-            ],
+          child: Center(
+            child: _FilledIcon(
+              icon: icon,
+              fillColor: fillColor,
+              progress: clampedProgress,
+            ),
           ),
         ),
       ),
@@ -289,13 +275,5 @@ Color _energyColor(String value) {
     'low' => const Color(0xFFFF9F6E),
     'high' => const Color(0xFF38A169),
     _ => const Color(0xFF6B9AF5),
-  };
-}
-
-String _energyLabel(String value) {
-  return switch (value) {
-    'low' => '낮음',
-    'high' => '높음',
-    _ => '보통',
   };
 }
