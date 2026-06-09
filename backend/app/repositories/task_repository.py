@@ -195,6 +195,50 @@ class SupabaseTaskRepository:
         )
         return [_map_reminder_response(row) for row in _sort_reminder_rows(response.data or [])]
 
+    def delete_task(self, *, user_id: str, task_id: str) -> None:
+        response = (
+            self._client.table("tasks")
+            .delete()
+            .eq("user_id", user_id)
+            .eq("id", task_id)
+            .execute()
+        )
+        _ensure_mutation_succeeded(response, "Task delete did not affect any rows.")
+
+    def restore_completed(
+        self,
+        *,
+        user_id: str,
+        task_id: str,
+        elapsed_seconds: int,
+    ) -> TaskResponse:
+        payload = {
+            "status": TaskStatus.PAUSED.value,
+            "completed_at": None,
+            "elapsed_seconds": max(0, int(elapsed_seconds or 0)),
+        }
+        response = (
+            self._client.table("tasks")
+            .update(payload)
+            .eq("user_id", user_id)
+            .eq("id", task_id)
+            .eq("status", TaskStatus.DONE.value)
+            .execute()
+        )
+        _ensure_mutation_succeeded(response, "Task restore did not affect any rows.")
+        self._restore_subtasks_for_task(user_id=user_id, task_id=task_id)
+        return self.get(user_id=user_id, task_id=task_id)
+
+    def _restore_subtasks_for_task(self, *, user_id: str, task_id: str) -> None:
+        (
+            self._client.table("subtasks")
+            .update({"status": SubtaskStatus.TODO.value, "completed_at": None})
+            .eq("user_id", user_id)
+            .eq("task_id", task_id)
+            .eq("status", SubtaskStatus.DONE.value)
+            .execute()
+        )
+
     def update_progress(
         self,
         *,

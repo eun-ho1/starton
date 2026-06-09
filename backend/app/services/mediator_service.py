@@ -201,6 +201,9 @@ def _compact_user_context(value: dict[str, Any]) -> dict[str, Any]:
     available_minutes_today = value.get("available_minutes_today")
     if isinstance(available_minutes_today, int) and available_minutes_today > 0:
         compact["available_minutes_today"] = available_minutes_today
+    extra = value.get("extra")
+    if isinstance(extra, dict) and extra:
+        compact["extra"] = extra
     return compact
 
 

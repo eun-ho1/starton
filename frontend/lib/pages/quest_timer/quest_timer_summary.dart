@@ -9,12 +9,14 @@ class QuestTimerSummary extends StatelessWidget {
     required this.earnedExp,
     required this.maxDurationSeconds,
     this.onSubtaskSelect,
+    this.onAddSubtaskTime,
   });
 
   final QuestItem quest;
   final int earnedExp;
   final int maxDurationSeconds;
   final ValueChanged<String>? onSubtaskSelect;
+  final ValueChanged<String>? onAddSubtaskTime;
 
   @override
   Widget build(BuildContext context) {
@@ -92,7 +94,11 @@ class QuestTimerSummary extends StatelessWidget {
             ],
             if (quest.subtasks.isNotEmpty) ...[
               const SizedBox(height: 18),
-              _QuestSubtaskSummary(quest: quest, onSelect: onSubtaskSelect),
+              _QuestSubtaskSummary(
+                quest: quest,
+                onSelect: onSubtaskSelect,
+                onAddTime: onAddSubtaskTime,
+              ),
             ],
           ],
         ),
@@ -134,11 +140,49 @@ class _QuestDueDateRow extends StatelessWidget {
   }
 }
 
+class _AddSubtaskTimeButton extends StatelessWidget {
+  const _AddSubtaskTimeButton({required this.onTap});
+
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: neu.Neumorphic(
+        style: const neu.NeumorphicStyle(
+          depth: 3,
+          intensity: 0.85,
+          surfaceIntensity: 0.16,
+          color: Color(0xFFF1F3F8),
+          shadowLightColor: Colors.white,
+          shadowDarkColor: Color(0xFFD0D7E5),
+          boxShape: neu.NeumorphicBoxShape.circle(),
+        ),
+        child: const SizedBox(
+          width: 22,
+          height: 22,
+          child: Icon(
+            Icons.add_rounded,
+            size: 16,
+            color: Color(0xFF6F63FF),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _QuestSubtaskSummary extends StatelessWidget {
-  const _QuestSubtaskSummary({required this.quest, this.onSelect});
+  const _QuestSubtaskSummary({
+    required this.quest,
+    this.onSelect,
+    this.onAddTime,
+  });
 
   final QuestItem quest;
   final ValueChanged<String>? onSelect;
+  final ValueChanged<String>? onAddTime;
 
   @override
   Widget build(BuildContext context) {
@@ -208,18 +252,30 @@ class _QuestSubtaskSummary extends StatelessWidget {
                                 ),
                               ),
                               const SizedBox(height: 5),
-                              ClipRRect(
-                                borderRadius: BorderRadius.circular(99),
-                                child: LinearProgressIndicator(
-                                  value: progress,
-                                  minHeight: 4,
-                                  color: subtask.isDone
-                                      ? const Color(0xFF38A169)
-                                      : isActive
-                                      ? const Color(0xFF6F63FF)
-                                      : const Color(0xFFAAB3C3),
-                                  backgroundColor: const Color(0xFFE1E6EF),
-                                ),
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: ClipRRect(
+                                      borderRadius: BorderRadius.circular(99),
+                                      child: LinearProgressIndicator(
+                                        value: progress,
+                                        minHeight: 4,
+                                        color: subtask.isDone
+                                            ? const Color(0xFF38A169)
+                                            : isActive
+                                            ? const Color(0xFF6F63FF)
+                                            : const Color(0xFFAAB3C3),
+                                        backgroundColor: const Color(0xFFE1E6EF),
+                                      ),
+                                    ),
+                                  ),
+                                  if (onAddTime != null) ...[
+                                    const SizedBox(width: 8),
+                                    _AddSubtaskTimeButton(
+                                      onTap: () => onAddTime!(subtask.id),
+                                    ),
+                                  ],
+                                ],
                               ),
                               if (_questSubtaskMeta(
                                 subtask,

@@ -11,12 +11,18 @@ class HomeQuestList extends StatelessWidget {
     required this.onAddQuest,
     required this.onQuestTap,
     required this.onDeleteQuest,
+    this.bulkDeleteMode = false,
+    this.selectedQuestIds = const <String>{},
+    this.onToggleQuestSelection,
   });
 
   final List<QuestItem> quests;
   final VoidCallback onAddQuest;
   final ValueChanged<QuestItem> onQuestTap;
   final ValueChanged<QuestItem> onDeleteQuest;
+  final bool bulkDeleteMode;
+  final Set<String> selectedQuestIds;
+  final ValueChanged<QuestItem>? onToggleQuestSelection;
 
   @override
   Widget build(BuildContext context) {
@@ -29,8 +35,12 @@ class HomeQuestList extends StatelessWidget {
         for (var index = 0; index < quests.length; index++) ...[
           HomeQuestCard(
             quest: quests[index],
-            onTap: () => onQuestTap(quests[index]),
+            onTap: bulkDeleteMode
+                ? () => onToggleQuestSelection?.call(quests[index])
+                : () => onQuestTap(quests[index]),
             onDelete: () => onDeleteQuest(quests[index]),
+            selectable: bulkDeleteMode,
+            selected: selectedQuestIds.contains(quests[index].id),
           ),
           if (index != quests.length - 1) const SizedBox(height: 12),
         ],

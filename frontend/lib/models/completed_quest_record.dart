@@ -13,6 +13,7 @@ class CompletedQuestRecord {
     required this.elapsedSeconds,
     List<QuestSubtask>? subtasks,
     this.proofImagePath,
+    this.syncTarget,
   }) : subtasks = List.unmodifiable(subtasks ?? const <QuestSubtask>[]);
 
   final String questId;
@@ -24,6 +25,37 @@ class CompletedQuestRecord {
   final int elapsedSeconds;
   final List<QuestSubtask> subtasks;
   final String? proofImagePath;
+  final String? syncTarget;
+
+  CompletedQuestRecord copyWith({
+    String? questId,
+    String? title,
+    String? difficulty,
+    String? category,
+    int? earnedExp,
+    String? completedAt,
+    int? elapsedSeconds,
+    List<QuestSubtask>? subtasks,
+    Object? proofImagePath = _completedQuestNoChange,
+    Object? syncTarget = _completedQuestNoChange,
+  }) {
+    return CompletedQuestRecord(
+      questId: questId ?? this.questId,
+      title: title ?? this.title,
+      difficulty: difficulty ?? this.difficulty,
+      category: category ?? this.category,
+      earnedExp: earnedExp ?? this.earnedExp,
+      completedAt: completedAt ?? this.completedAt,
+      elapsedSeconds: elapsedSeconds ?? this.elapsedSeconds,
+      subtasks: subtasks ?? this.subtasks,
+      proofImagePath: identical(proofImagePath, _completedQuestNoChange)
+          ? this.proofImagePath
+          : proofImagePath as String?,
+      syncTarget: identical(syncTarget, _completedQuestNoChange)
+          ? this.syncTarget
+          : syncTarget as String?,
+    );
+  }
 
   factory CompletedQuestRecord.fromApiResponse(
     CompletedQuestRecordResponse response,
@@ -38,6 +70,7 @@ class CompletedQuestRecord {
       elapsedSeconds: response.elapsedSeconds,
       subtasks: const <QuestSubtask>[],
       proofImagePath: response.proofImagePath,
+      syncTarget: null,
     );
   }
 
@@ -52,6 +85,7 @@ class CompletedQuestRecord {
       'elapsedSeconds': elapsedSeconds,
       'subtasks': subtasks.map((subtask) => subtask.toJson()).toList(),
       'proofImagePath': proofImagePath,
+      'syncTarget': syncTarget,
     };
   }
 
@@ -81,9 +115,13 @@ class CompletedQuestRecord {
       proofImagePath:
           (json['proofImagePath'] as String?) ??
           (json['proof_image_path'] as String?),
+      syncTarget:
+          (json['syncTarget'] as String?) ?? (json['sync_target'] as String?),
     );
   }
 }
+
+const _completedQuestNoChange = Object();
 
 int? _readJsonInt(Object? value) {
   if (value is int) {

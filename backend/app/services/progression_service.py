@@ -24,6 +24,66 @@ def apply_exp(
     return next_level, next_current_exp, next_max_exp
 
 
+
+
+def remove_exp(
+    *,
+    level: int,
+    current_exp: int,
+    max_exp: int,
+    lost_exp: int,
+) -> tuple[int, int, int]:
+    next_level = max(0, int(level))
+    next_current_exp = max(0, int(current_exp))
+    next_max_exp = max(1, int(max_exp))
+    remaining_loss = max(0, int(lost_exp))
+
+    while remaining_loss > next_current_exp and next_level > 0:
+        remaining_loss -= next_current_exp
+        next_level -= 1
+        next_max_exp = 500 + (next_level * 100)
+        next_current_exp = next_max_exp
+
+    next_current_exp = max(0, next_current_exp - remaining_loss)
+    return next_level, next_current_exp, next_max_exp
+
+
+def subtract_category_stats(
+    *,
+    diligence_stat: int,
+    order_stat: int,
+    intelligence_stat: int,
+    health_stat: int,
+    category: str,
+    difficulty: str,
+) -> tuple[int, int, int, int]:
+    difficulty_key = difficulty.lower()
+    diligence_gain = {"easy": 4, "normal": 6, "hard": 9}.get(difficulty_key, 9)
+    category_gain = {"easy": 5, "normal": 8, "hard": 12}.get(difficulty_key, 12)
+    normalized_category = category.lower()
+
+    next_diligence = max(
+        0,
+        diligence_stat - diligence_gain - (category_gain if normalized_category == "work" else 0),
+    )
+    next_order = (
+        max(0, order_stat - category_gain)
+        if normalized_category == "home"
+        else order_stat
+    )
+    next_intelligence = (
+        max(0, intelligence_stat - category_gain)
+        if normalized_category == "study"
+        else intelligence_stat
+    )
+    next_health = (
+        max(0, health_stat - category_gain)
+        if normalized_category == "life"
+        else health_stat
+    )
+
+    return next_diligence, next_order, next_intelligence, next_health
+
 def normalized_weekly_counts(counts: list[int]) -> list[int]:
     normalized = list(counts[:7]) if counts else [0] * 7
     while len(normalized) < 7:

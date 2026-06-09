@@ -298,6 +298,43 @@ async def delete_quest(
 
 
 @router.post(
+    "/{quest_id}/undo-complete",
+    response_model=QuestItemApiResponse,
+    summary="Undo completed quest",
+    description="Move a completed legacy quest back to active progress.",
+)
+async def undo_complete_quest(
+    quest_id: str,
+    user_id: str = Depends(get_current_user_id),
+    quest_service: QuestService = Depends(get_quest_service),
+) -> QuestItemApiResponse:
+    try:
+        quest = quest_service.undo_complete_quest(user_id, quest_id)
+    except QuestNotFoundError as error:
+        raise _quest_http_exception(
+            status_code=status.HTTP_404_NOT_FOUND,
+            code=error.code,
+            message=error.message,
+        ) from error
+    except QuestOperationError as error:
+        raise _quest_http_exception(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            code=error.code,
+            message=error.message,
+        ) from error
+    except Exception as error:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=ErrorDetail(
+                code="quest_undo_complete_failed",
+                message="Failed to undo quest completion.",
+            ).model_dump(),
+        ) from error
+
+    return QuestItemApiResponse(success=True, data=quest, error=None)
+
+
+@router.post(
     "/{quest_id}/complete",
     response_model=CompletedQuestRecordApiResponse,
     summary="Complete quest",

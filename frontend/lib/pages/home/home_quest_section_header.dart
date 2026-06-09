@@ -29,11 +29,21 @@ class HomeQuestSectionHeader extends StatelessWidget {
     required this.questCount,
     required this.quests,
     required this.completedRecords,
+    required this.bulkDeleteMode,
+    required this.selectedDeleteCount,
+    required this.onToggleBulkDelete,
+    required this.onConfirmBulkDelete,
+    required this.onCancelBulkDelete,
   });
 
   final int questCount;
   final List<QuestItem> quests;
   final List<CompletedQuestRecord> completedRecords;
+  final bool bulkDeleteMode;
+  final int selectedDeleteCount;
+  final VoidCallback onToggleBulkDelete;
+  final VoidCallback onConfirmBulkDelete;
+  final VoidCallback onCancelBulkDelete;
 
   void _openCalendar(BuildContext context) {
     Navigator.of(context).push(
@@ -74,7 +84,75 @@ class HomeQuestSectionHeader extends StatelessWidget {
             ),
           ),
         ),
+        if (bulkDeleteMode) ...[
+          _HeaderTextButton(
+            label: '취소',
+            color: const Color(0xFF7E899D),
+            onTap: onCancelBulkDelete,
+          ),
+          const SizedBox(width: 6),
+          _HeaderTextButton(
+            label: '삭제 $selectedDeleteCount',
+            color: const Color(0xFFE55353),
+            onTap: selectedDeleteCount > 0 ? onConfirmBulkDelete : null,
+          ),
+        ] else
+          _TrashHeaderButton(
+            enabled: questCount > 0,
+            onTap: onToggleBulkDelete,
+          ),
       ],
+    );
+  }
+}
+
+class _TrashHeaderButton extends StatelessWidget {
+  const _TrashHeaderButton({required this.enabled, required this.onTap});
+
+  final bool enabled;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: '여러 퀘스트 삭제',
+      child: IconButton(
+        onPressed: enabled ? onTap : null,
+        icon: const Icon(Icons.delete_outline_rounded),
+        color: const Color(0xFFE55353),
+        disabledColor: const Color(0xFFC8CDD8),
+        iconSize: 22,
+        padding: EdgeInsets.zero,
+        constraints: const BoxConstraints(minWidth: 38, minHeight: 38),
+        visualDensity: VisualDensity.compact,
+      ),
+    );
+  }
+}
+
+class _HeaderTextButton extends StatelessWidget {
+  const _HeaderTextButton({
+    required this.label,
+    required this.color,
+    required this.onTap,
+  });
+
+  final String label;
+  final Color color;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return TextButton(
+      onPressed: onTap,
+      style: TextButton.styleFrom(
+        foregroundColor: color,
+        disabledForegroundColor: const Color(0xFFC8CDD8),
+        visualDensity: VisualDensity.compact,
+        padding: const EdgeInsets.symmetric(horizontal: 8),
+        textStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w900),
+      ),
+      child: Text(label),
     );
   }
 }

@@ -79,9 +79,12 @@ class LocalDataStore {
     AppLocalData currentData,
     CompletedQuestRecord record,
   ) {
-    final completedAt =
-        DateTime.tryParse(record.completedAt)?.toLocal() ?? DateTime.now();
-    final normalized = normalizeLocalDataForDate(currentData, now: completedAt);
+    final now = DateTime.now();
+    final completedAt = DateTime.tryParse(record.completedAt)?.toLocal() ?? now;
+    final normalized = normalizeLocalDataForDate(currentData, now: now);
+    final sameDay = _isSameDate(completedAt, now);
+    final sameWeek = _isSameWeek(completedAt, now);
+    final sameMonth = completedAt.year == now.year && completedAt.month == now.month;
 
     final nextLevelState = applyLocalDataExp(
       level: normalized.level,
@@ -167,6 +170,103 @@ class LocalDataStore {
     );
   }
 
+  AppLocalData undoCompleteQuest(
+    AppLocalData currentData,
+    CompletedQuestRecord record,
+  ) {
+    final now = DateTime.now();
+    final completedAt = DateTime.tryParse(record.completedAt)?.toLocal() ?? now;
+    final normalized = normalizeLocalDataForDate(currentData, now: now);
+    final sameDay = _isSameDate(completedAt, now);
+    final sameWeek = _isSameWeek(completedAt, now);
+    final sameMonth = completedAt.year == now.year && completedAt.month == now.month;
+    final existingQuestIds = normalized.quests.map((quest) => quest.id).toSet();
+
+    final nextCompletedQuests = List<CompletedQuestRecord>.from(
+      normalized.completedQuests,
+    );
+    final removedIndex = nextCompletedQuests.indexWhere(
+      (item) => item.questId == record.questId && item.completedAt == record.completedAt,
+    );
+    if (removedIndex >= 0) {
+      nextCompletedQuests.removeAt(removedIndex);
+    } else {
+      nextCompletedQuests.removeWhere((item) => item.questId == record.questId);
+    }
+
+    final weeklyCounts = List<int>.from(
+      normalized.weeklyActivityCounts.isEmpty
+          ? List<int>.filled(7, 0)
+          : normalized.weeklyActivityCounts,
+    );
+    while (weeklyCounts.length < 7) {
+      weeklyCounts.add(0);
+    }
+    final weekdayIndex = completedAt.weekday - 1;
+    if (sameWeek && weekdayIndex >= 0 && weekdayIndex < weeklyCounts.length) {
+      weeklyCounts[weekdayIndex] = math.max(0, weeklyCounts[weekdayIndex] - 1);
+    }
+
+    final weeklyCompletedCount = sameWeek
+        ? math.max(0, normalized.weeklyCompletedCount - 1)
+        : normalized.weeklyCompletedCount;
+    final weeklyCompletionRate = calculateWeeklyCompletionRate(
+      weeklyCompletedCount,
+      normalized.weeklyRewardTarget,
+    );
+    final expState = removeLocalDataExp(
+      level: normalized.level,
+      currentExp: normalized.currentExp,
+      lostExp: record.earnedExp,
+    );
+    final categoryStats = subtractLocalDataCategoryStats(
+      diligenceStat: normalized.diligenceStat,
+      orderStat: normalized.orderStat,
+      intelligenceStat: normalized.intelligenceStat,
+      healthStat: normalized.healthStat,
+      category: record.category,
+      difficulty: record.difficulty,
+    );
+
+    final restoredQuest = _questFromCompletedRecord(record);
+    final restoredQuests = existingQuestIds.contains(restoredQuest.id)
+        ? normalized.quests
+        : [restoredQuest, ...normalized.quests];
+
+    return normalized.copyWith(
+      userRole: roleForLevel(expState.level),
+      level: expState.level,
+      currentExp: expState.currentExp,
+      maxExp: expState.maxExp,
+      completedQuestCount: math.max(0, normalized.completedQuestCount - 1),
+      earnedExp: math.max(0, normalized.earnedExp - record.earnedExp),
+      dailyRewardCount: sameDay
+          ? math.max(0, normalized.dailyRewardCount - 1)
+          : normalized.dailyRewardCount,
+      weeklyRewardCount: sameWeek
+          ? math.max(0, normalized.weeklyRewardCount - 1)
+          : normalized.weeklyRewardCount,
+      monthlyRewardCount: sameMonth
+          ? math.max(0, normalized.monthlyRewardCount - 1)
+          : normalized.monthlyRewardCount,
+      weeklyCompletedCount: weeklyCompletedCount,
+      weeklyCompletionRate: weeklyCompletionRate,
+      weeklyRateDelta:
+          weeklyCompletionRate - normalized.previousWeeklyCompletionRate,
+      diligenceStat: categoryStats.diligenceStat,
+      orderStat: categoryStats.orderStat,
+      intelligenceStat: categoryStats.intelligenceStat,
+      healthStat: categoryStats.healthStat,
+      weeklyActivityCounts: weeklyCounts,
+      weeklyActivityBars: buildLocalDataWeeklyBars(weeklyCounts),
+      recentActivities: normalized.recentActivities
+          .where((activity) => !_matchesCompletedActivity(activity, record))
+          .toList(),
+      completedQuests: nextCompletedQuests,
+      quests: restoredQuests,
+    );
+  }
+
   AppLocalData completeDungeon(
     AppLocalData currentData, {
     required String dungeonId,
@@ -182,6 +282,65 @@ class LocalDataStore {
       clearedDungeonIds: [...normalized.clearedDungeonIds, dungeonId],
     );
   }
+}
+
+QuestItem _questFromCompletedRecord(CompletedQuestRecord record) {
+  final subtasks = record.subtasks
+      .map(
+        (subtask) => subtask.copyWith(
+          completedAt: subtask.isDone ? subtask.completedAt : null,
+        ),
+      )
+      .toList();
+  final defaultDurationSeconds = subtasks.isEmpty
+      ? defaultQuestDurationSecondsForDifficulty(record.difficulty)
+      : subtasks.fold<int>(
+          0,
+          (total, subtask) => total + subtask.plannedDurationSeconds,
+        );
+
+  return QuestItem(
+    id: record.questId,
+    title: record.title,
+    exp: record.earnedExp,
+    difficulty: record.difficulty,
+    category: record.category,
+    elapsedSeconds: record.elapsedSeconds,
+    defaultDurationSeconds: defaultDurationSeconds,
+    subtasks: subtasks,
+    activeSubtaskId: _firstIncompleteSubtaskId(subtasks),
+    syncTarget: record.syncTarget,
+  );
+}
+
+bool _isSameDate(DateTime left, DateTime right) {
+  return left.year == right.year &&
+      left.month == right.month &&
+      left.day == right.day;
+}
+
+bool _isSameWeek(DateTime left, DateTime right) {
+  final leftStart = DateTime(left.year, left.month, left.day)
+      .subtract(Duration(days: left.weekday - 1));
+  final rightStart = DateTime(right.year, right.month, right.day)
+      .subtract(Duration(days: right.weekday - 1));
+  return _isSameDate(leftStart, rightStart);
+}
+
+String? _firstIncompleteSubtaskId(List<QuestSubtask> subtasks) {
+  for (final subtask in subtasks) {
+    if (!subtask.isDone) {
+      return subtask.id;
+    }
+  }
+  return null;
+}
+
+bool _matchesCompletedActivity(
+  RecentActivity activity,
+  CompletedQuestRecord record,
+) {
+  return activity.subtitle.contains(record.title) && activity.exp == record.earnedExp;
 }
 
 AppLocalData _sanitizeLoadedData(AppLocalData data) {

@@ -125,69 +125,64 @@ class _QuestTimerScreenState extends State<QuestTimerScreen> {
                       constraints.maxWidth > constraints.maxHeight &&
                       constraints.maxWidth >= 640;
 
-                  return ListView(
-                    padding: EdgeInsets.fromLTRB(
-                      useLandscapeLayout ? 30 : 22,
-                      useLandscapeLayout ? 20 : 16,
-                      useLandscapeLayout ? 30 : 22,
-                      32,
+                  final content = QuestTimerContentCard(
+                    useLandscapeLayout: useLandscapeLayout,
+                    header: QuestTimerHeader(
+                      onBack: _popWithProgress,
+                      onEdit: _editQuest,
                     ),
-                    children: [
-                      if (!useLandscapeLayout) ...[
-                        QuestTimerHeader(
-                          onBack: _popWithProgress,
-                          onEdit: _editQuest,
-                        ),
-                        const SizedBox(height: 18),
-                      ],
-                      // 세로 화면은 기존 흐름을 유지하고, 가로 화면에서만 타이머를 오른쪽에 배치한다.
-                      QuestTimerContentCard(
-                        useLandscapeLayout: useLandscapeLayout,
-                        questSummary: QuestTimerSummary(
-                          quest: _quest,
-                          earnedExp: _calculateEarnedExp(),
-                          maxDurationSeconds: maxDurationSeconds,
-                          onSubtaskSelect: _selectSubtask,
-                        ),
-                        countdown: QuestTimerCountdown(
-                          controller: _countDownController,
-                          durationSeconds: maxDurationSeconds,
-                          elapsedSeconds: _elapsedSeconds,
-                          timerViewRevision: _timerViewRevision,
-                          running: _running,
-                          onComplete: _handleTimerComplete,
-                          onToggleTimer: _toggleTimer,
-                          formatDuration: _formatDuration,
-                        ),
-                        actionButtons: QuestTimerActionButtons(
-                          isCompleting: _isCompleting,
-                          running: _running,
-                          canReset: _elapsedSeconds > 0,
-                          // 임시수정: 테스트 중에는 1분 제한 없이 바로 완료 가능하게 둔다.
-                          canComplete: _elapsedSeconds >= 0,
-                          onResetTimer: _resetTimer,
-                          onToggleTimer: _toggleTimer,
-                          onStopTimer: _completeQuest,
-                        ),
-                        proofSection: QuestTimerProofSection(
-                          proofImagePath: _proofImage?.path,
-                          isCompleting: _isCompleting,
-                          compact: useLandscapeLayout,
-                          onPickCamera: () =>
-                              _pickProofImage(ImageSource.camera),
-                          onPickGallery: () =>
-                              _pickProofImage(ImageSource.gallery),
-                          onClearImage: () =>
-                              setState(() => _proofImage = null),
-                        ),
-                        categoryTimes: QuestTimerCategoryTimes(
-                          category: _quest.category,
-                          elapsedSeconds: _elapsedSeconds,
-                          compact: useLandscapeLayout,
-                          formatDuration: _formatDuration,
-                        ),
-                      ),
-                    ],
+                    questSummary: QuestTimerSummary(
+                      quest: _quest,
+                      earnedExp: _calculateEarnedExp(),
+                      maxDurationSeconds: maxDurationSeconds,
+                      onSubtaskSelect: _selectSubtask,
+                      onAddSubtaskTime: _addSubtaskTime,
+                    ),
+                    countdown: QuestTimerCountdown(
+                      controller: _countDownController,
+                      durationSeconds: maxDurationSeconds,
+                      elapsedSeconds: _elapsedSeconds,
+                      timerViewRevision: _timerViewRevision,
+                      running: _running,
+                      onComplete: _handleTimerComplete,
+                      onToggleTimer: _toggleTimer,
+                      formatDuration: _formatDuration,
+                    ),
+                    actionButtons: QuestTimerActionButtons(
+                      isCompleting: _isCompleting,
+                      running: _running,
+                      canReset: _elapsedSeconds > 0,
+                      canComplete: _elapsedSeconds >= 60,
+                      onResetTimer: _resetTimer,
+                      onToggleTimer: _toggleTimer,
+                      onStopTimer: _completeQuest,
+                    ),
+                    proofSection: QuestTimerProofSection(
+                      proofImagePath: _proofImage?.path,
+                      isCompleting: _isCompleting,
+                      compact: useLandscapeLayout,
+                      onPickCamera: () => _pickProofImage(ImageSource.camera),
+                      onPickGallery: () => _pickProofImage(ImageSource.gallery),
+                      onClearImage: () => setState(() => _proofImage = null),
+                    ),
+                    categoryTimes: QuestTimerCategoryTimes(
+                      category: _quest.category,
+                      elapsedSeconds: _elapsedSeconds,
+                      compact: useLandscapeLayout,
+                      formatDuration: _formatDuration,
+                    ),
+                  );
+
+                  if (useLandscapeLayout) {
+                    return Padding(
+                      padding: const EdgeInsets.fromLTRB(30, 20, 30, 32),
+                      child: content,
+                    );
+                  }
+
+                  return ListView(
+                    padding: const EdgeInsets.fromLTRB(22, 16, 22, 32),
+                    children: [content],
                   );
                 },
               ),
@@ -201,10 +196,7 @@ class _QuestTimerScreenState extends State<QuestTimerScreen> {
   }
 
   void _handleTimerComplete() {
-    if (!mounted || _isCompleting) {
-      return;
-    }
-    unawaited(_completeQuest());
+    // 계획 시간이 끝나도 완료 처리하지 않고, 로컬 ticker로 초과 시간을 계속 기록한다.
   }
 
   void _toggleTimer() {
@@ -240,6 +232,33 @@ class _QuestTimerScreenState extends State<QuestTimerScreen> {
     widget.onQuestChanged?.call(updatedQuest);
   }
 
+  void _addSubtaskTime(String subtaskId) {
+    final subtasks = _quest.subtasks.map((subtask) {
+      if (subtask.id != subtaskId) {
+        return subtask;
+      }
+      final currentMinutes = subtask.estimatedMinutes;
+      final nextMinutes = (currentMinutes == null || currentMinutes <= 0)
+          ? 11
+          : currentMinutes + 10;
+      return subtask.copyWith(
+        estimatedMinutes: nextMinutes,
+        status: subtask.isDone ? 'todo' : subtask.status,
+        completedAt: subtask.isDone ? null : subtask.completedAt,
+      );
+    }).toList();
+
+    final updatedQuest = _quest.copyWith(
+      subtasks: subtasks,
+      activeSubtaskId: _validActiveSubtaskId(subtasks, _quest.activeSubtaskId),
+    );
+    setState(() {
+      _quest = updatedQuest;
+      _timerViewRevision += 1;
+    });
+    widget.onQuestChanged?.call(updatedQuest);
+  }
+
   Future<void> _toggleTimerAsync() async {
     // 진행 중이면 일시정지, 끝까지 찼으면 초기화 후 재시작, 그 외에는 시작/재개.
     if (_running) {
@@ -259,21 +278,6 @@ class _QuestTimerScreenState extends State<QuestTimerScreen> {
         );
       }
       return;
-    }
-
-    if (_elapsedSeconds >= _durationSeconds) {
-      final resetSubtasks = _resetSubtasks(_quest.subtasks);
-      setState(() {
-        _elapsedSeconds = 0;
-        _quest = _quest.copyWith(
-          elapsedSeconds: 0,
-          subtasks: resetSubtasks,
-          activeSubtaskId: _firstIncompleteSubtaskId(resetSubtasks),
-        );
-        _hasStarted = false;
-        _timerViewRevision += 1;
-      });
-      widget.onQuestChanged?.call(_quest);
     }
 
     if (_hasStarted) {
@@ -297,7 +301,12 @@ class _QuestTimerScreenState extends State<QuestTimerScreen> {
   }
 
   Future<void> _resetTimerAsync() async {
-    if (_running && _elapsedSeconds < _durationSeconds) {
+    final resetTarget = await _pickResetTarget();
+    if (!mounted || resetTarget == null) {
+      return;
+    }
+
+    if (_running) {
       _countDownController.pause();
     }
 
@@ -311,19 +320,105 @@ class _QuestTimerScreenState extends State<QuestTimerScreen> {
       return;
     }
 
-    final resetSubtasks = _resetSubtasks(_quest.subtasks);
     setState(() {
+      _applyResetTarget(resetTarget);
+      _hasStarted = false;
+      _running = false;
+      _timerViewRevision += 1;
+    });
+    widget.onQuestChanged?.call(_quest);
+  }
+
+  Future<_TimerResetTarget?> _pickResetTarget() async {
+    if (_quest.subtasks.isEmpty) {
+      return const _TimerResetTarget.all();
+    }
+
+    return showModalBottomSheet<_TimerResetTarget>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (context) {
+        return SafeArea(
+          top: false,
+          child: Container(
+            margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+            padding: const EdgeInsets.fromLTRB(20, 18, 20, 20),
+            decoration: BoxDecoration(
+              color: const Color(0xFFF1F3F8),
+              borderRadius: BorderRadius.circular(26),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.14),
+                  blurRadius: 32,
+                  offset: const Offset(0, 18),
+                ),
+              ],
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const Text(
+                  '시간 초기화',
+                  style: TextStyle(
+                    color: Color(0xFF172033),
+                    fontSize: 18,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                ListTile(
+                  leading: const Icon(Icons.restart_alt_rounded),
+                  title: const Text('해당 퀘스트 전체 시간 초기화'),
+                  onTap: () => Navigator.of(context).pop(const _TimerResetTarget.all()),
+                ),
+                const Divider(height: 12),
+                for (final subtask in _quest.subtasks)
+                  ListTile(
+                    leading: const Icon(Icons.timer_outlined),
+                    title: Text(subtask.title, maxLines: 1, overflow: TextOverflow.ellipsis),
+                    subtitle: Text(
+                      '${_formatDuration(Duration(seconds: subtask.clampedElapsedSeconds))} / '
+                      '${_formatDuration(Duration(seconds: subtask.plannedDurationSeconds))}',
+                    ),
+                    onTap: () => Navigator.of(context).pop(
+                      _TimerResetTarget.subtask(subtask.id),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  void _applyResetTarget(_TimerResetTarget target) {
+    if (target.subtaskId == null) {
+      final resetSubtasks = _resetSubtasks(_quest.subtasks);
       _elapsedSeconds = 0;
       _quest = _quest.copyWith(
         elapsedSeconds: 0,
         subtasks: resetSubtasks,
         activeSubtaskId: _firstIncompleteSubtaskId(resetSubtasks),
       );
-      _hasStarted = false;
-      _running = false;
-      _timerViewRevision += 1;
-    });
-    widget.onQuestChanged?.call(_quest);
+      return;
+    }
+
+    final subtasks = _quest.subtasks.map((subtask) {
+      if (subtask.id != target.subtaskId) {
+        return subtask;
+      }
+      _elapsedSeconds = (_elapsedSeconds - subtask.clampedElapsedSeconds)
+          .clamp(0, 1 << 31)
+          .toInt();
+      return subtask.copyWith(status: 'todo', completedAt: null, elapsedSeconds: 0);
+    }).toList();
+    _quest = _quest.copyWith(
+      elapsedSeconds: _elapsedSeconds,
+      subtasks: subtasks,
+      activeSubtaskId: target.subtaskId,
+    );
   }
 
   Future<void> _editQuest() async {
@@ -437,6 +532,12 @@ class _QuestTimerScreenState extends State<QuestTimerScreen> {
     if (!mounted || _isCompleting) {
       return;
     }
+    if (_elapsedSeconds < 60) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('퀘스트 완료는 1분 뒤부터 가능해요.')),
+      );
+      return;
+    }
 
     setState(() => _isCompleting = true);
 
@@ -480,6 +581,7 @@ class _QuestTimerScreenState extends State<QuestTimerScreen> {
         elapsedSeconds: _elapsedSeconds,
         subtasks: _quest.subtasks,
         proofImagePath: proofImagePath,
+        syncTarget: _quest.syncTarget,
       ),
     );
   }
@@ -534,10 +636,7 @@ class _QuestTimerScreenState extends State<QuestTimerScreen> {
         return;
       }
 
-      final shouldComplete = _advanceQuestProgress(1);
-      if (shouldComplete) {
-        unawaited(_completeQuest());
-      }
+      _advanceQuestProgress(1);
     });
   }
 
@@ -550,11 +649,9 @@ class _QuestTimerScreenState extends State<QuestTimerScreen> {
       return false;
     }
 
-    final durationSeconds = _durationSeconds;
     if (_quest.subtasks.isEmpty) {
-      final nextElapsedSeconds = _clampElapsedSeconds(
+      final nextElapsedSeconds = _nonNegativeElapsedSeconds(
         _elapsedSeconds + elapsedDeltaSeconds,
-        durationSeconds,
       );
       final updatedQuest = _quest.copyWith(elapsedSeconds: nextElapsedSeconds);
       setState(() {
@@ -568,7 +665,7 @@ class _QuestTimerScreenState extends State<QuestTimerScreen> {
         }
       });
       widget.onQuestChanged?.call(updatedQuest);
-      return nextElapsedSeconds >= durationSeconds;
+      return false;
     }
 
     final result = _advanceSubtasks(
@@ -577,9 +674,8 @@ class _QuestTimerScreenState extends State<QuestTimerScreen> {
       elapsedDeltaSeconds: elapsedDeltaSeconds,
       completedAt: DateTime.now(),
     );
-    final nextElapsedSeconds = _clampElapsedSeconds(
-      _elapsedSeconds + result.appliedSeconds,
-      durationSeconds,
+    final nextElapsedSeconds = _nonNegativeElapsedSeconds(
+      _elapsedSeconds + elapsedDeltaSeconds,
     );
     final updatedQuest = _quest.copyWith(
       elapsedSeconds: nextElapsedSeconds,
@@ -599,16 +695,13 @@ class _QuestTimerScreenState extends State<QuestTimerScreen> {
     });
     widget.onQuestChanged?.call(updatedQuest);
 
-    return result.subtasks.isNotEmpty && result.activeSubtaskId == null;
+    return false;
   }
 
   QuestItem _normalizeQuestProgress(QuestItem quest) {
     if (quest.subtasks.isEmpty) {
       return quest.copyWith(
-        elapsedSeconds: _clampElapsedSeconds(
-          quest.elapsedSeconds,
-          quest.effectiveDurationSeconds,
-        ),
+        elapsedSeconds: _nonNegativeElapsedSeconds(quest.elapsedSeconds),
         activeSubtaskId: null,
       );
     }
@@ -623,10 +716,7 @@ class _QuestTimerScreenState extends State<QuestTimerScreen> {
 
     if (elapsedGap <= 0) {
       return quest.copyWith(
-        elapsedSeconds: _clampElapsedSeconds(
-          quest.elapsedSeconds,
-          quest.effectiveDurationSeconds,
-        ),
+        elapsedSeconds: _nonNegativeElapsedSeconds(quest.elapsedSeconds),
         subtasks: normalizedSubtasks,
         activeSubtaskId: activeSubtaskId,
       );
@@ -640,10 +730,7 @@ class _QuestTimerScreenState extends State<QuestTimerScreen> {
     );
 
     return quest.copyWith(
-      elapsedSeconds: _clampElapsedSeconds(
-        quest.elapsedSeconds,
-        quest.effectiveDurationSeconds,
-      ),
+      elapsedSeconds: _nonNegativeElapsedSeconds(quest.elapsedSeconds),
       subtasks: advanced.subtasks,
       activeSubtaskId: advanced.activeSubtaskId,
     );
@@ -800,6 +887,13 @@ class _QuestTimerScreenState extends State<QuestTimerScreen> {
     return elapsedSeconds;
   }
 
+  int _nonNegativeElapsedSeconds(int elapsedSeconds) {
+    if (elapsedSeconds < 0) {
+      return 0;
+    }
+    return elapsedSeconds;
+  }
+
   void _stopLocalTicker() {
     _localTicker?.cancel();
     _localTicker = null;
@@ -818,10 +912,7 @@ class _QuestTimerScreenState extends State<QuestTimerScreen> {
         return;
       }
 
-      final nextElapsedSeconds = _clampElapsedSeconds(
-        tick.elapsedSeconds,
-        _durationSeconds,
-      );
+      final nextElapsedSeconds = _nonNegativeElapsedSeconds(tick.elapsedSeconds);
       if (_localTicker != null && tick.isRunning) {
         return;
       }
@@ -838,9 +929,8 @@ class _QuestTimerScreenState extends State<QuestTimerScreen> {
       }
 
       final elapsedDelta = nextElapsedSeconds - _elapsedSeconds;
-      var shouldComplete = false;
       if (elapsedDelta > 0) {
-        shouldComplete = _advanceQuestProgress(
+        _advanceQuestProgress(
           elapsedDelta,
           running: tick.isRunning,
           hasStarted: tick.elapsedSeconds > 0 || tick.isRunning,
@@ -860,10 +950,6 @@ class _QuestTimerScreenState extends State<QuestTimerScreen> {
       if (tick.isRunning && _localTicker == null) {
         _startLocalTicker();
       }
-
-      if (shouldComplete) {
-        unawaited(_completeQuest());
-      }
     });
 
     unawaited(_syncBackgroundTimerState());
@@ -875,13 +961,9 @@ class _QuestTimerScreenState extends State<QuestTimerScreen> {
       return;
     }
 
-    final shouldStartCountdown =
-        snapshot.isRunning && snapshot.elapsedSeconds < _durationSeconds;
+    final shouldStartCountdown = snapshot.isRunning;
 
-    final nextElapsedSeconds = _clampElapsedSeconds(
-      snapshot.elapsedSeconds,
-      _durationSeconds,
-    );
+    final nextElapsedSeconds = _nonNegativeElapsedSeconds(snapshot.elapsedSeconds);
     if (nextElapsedSeconds < _elapsedSeconds) {
       if (!snapshot.isRunning) {
         _stopLocalTicker();
@@ -895,15 +977,11 @@ class _QuestTimerScreenState extends State<QuestTimerScreen> {
 
     final elapsedDelta = nextElapsedSeconds - _elapsedSeconds;
     if (elapsedDelta > 0) {
-      final shouldComplete = _advanceQuestProgress(
+      _advanceQuestProgress(
         elapsedDelta,
         running: snapshot.isRunning,
         hasStarted: snapshot.elapsedSeconds > 0 || snapshot.isRunning,
       );
-      if (shouldComplete) {
-        unawaited(_completeQuest());
-        return;
-      }
     } else {
       setState(() {
         _elapsedSeconds = nextElapsedSeconds;
@@ -935,4 +1013,14 @@ class _SubtaskAdvanceResult {
   final List<QuestSubtask> subtasks;
   final String? activeSubtaskId;
   final int appliedSeconds;
+}
+
+class _TimerResetTarget {
+  const _TimerResetTarget._(this.subtaskId);
+
+  const _TimerResetTarget.all() : this._(null);
+
+  const _TimerResetTarget.subtask(String subtaskId) : this._(subtaskId);
+
+  final String? subtaskId;
 }

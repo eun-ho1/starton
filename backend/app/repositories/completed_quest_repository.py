@@ -105,12 +105,116 @@ class SupabaseCompletedQuestRepository(CompletedQuestRepository):
         }
         self._client.table("recent_activities").insert(payload).execute()
 
+    def get_latest_completed_record(
+        self,
+        user_id: str,
+        *,
+        quest_id: str | None = None,
+        task_id: str | None = None,
+    ) -> dict[str, Any]:
+        candidates: list[dict[str, Any]] = []
+
+        client_id = task_id or quest_id
+        if client_id:
+            candidates.extend(
+                self._list_completion_rows(
+                    user_id=user_id,
+                    column="client_quest_id",
+                    value=client_id,
+                )
+            )
+
+        normalized_task_id = _optional_uuid_string(task_id)
+        if normalized_task_id is not None:
+            candidates.extend(
+                self._list_completion_rows(
+                    user_id=user_id,
+                    column="task_id",
+                    value=normalized_task_id,
+                )
+            )
+
+        normalized_quest_id = _optional_uuid_string(quest_id)
+        if normalized_quest_id is not None:
+            candidates.extend(
+                self._list_completion_rows(
+                    user_id=user_id,
+                    column="quest_id",
+                    value=normalized_quest_id,
+                )
+            )
+
+        unique_rows = {row["id"]: row for row in candidates if row.get("id")}
+        rows = sorted(
+            unique_rows.values(),
+            key=lambda row: str(row.get("completed_at") or ""),
+            reverse=True,
+        )
+        if not rows:
+            raise ValueError("Completed quest record was not found for the given user_id.")
+        return rows[0]
+
+    def delete_completed_record(
+        self,
+        user_id: str,
+        completed_quest_id: str,
+    ) -> None:
+        response = (
+            self._client.table("completed_quests")
+            .delete()
+            .eq("user_id", user_id)
+            .eq("id", completed_quest_id)
+            .execute()
+        )
+        _ensure_mutation_succeeded(
+            response,
+            "Completed quest delete did not affect any rows.",
+        )
+
+    def delete_recent_activity_for_completed_quest(
+        self,
+        user_id: str,
+        completed_quest_id: str,
+    ) -> None:
+        (
+            self._client.table("recent_activities")
+            .delete()
+            .eq("user_id", user_id)
+            .eq("completed_quest_id", completed_quest_id)
+            .execute()
+        )
+
+    def _list_completion_rows(
+        self,
+        *,
+        user_id: str,
+        column: str,
+        value: str,
+    ) -> list[dict[str, Any]]:
+        response = (
+            self._client.table("completed_quests")
+            .select("*")
+            .eq("user_id", user_id)
+            .eq(column, value)
+            .order("completed_at", desc=True)
+            .limit(3)
+            .execute()
+        )
+        return response.data or []
+
 
 def _single_row(response: Any) -> dict[str, Any]:
     rows = response.data or []
     if not rows:
         raise ValueError("Requested resource was not found for the given user_id.")
     return rows[0]
+
+
+def _ensure_mutation_succeeded(response: Any, message: str) -> None:
+    if getattr(response, "data", None) is None:
+        return
+    if isinstance(response.data, list) and response.data == []:
+        raise ValueError(message)
 
 
 def _map_completed_row(row: dict[str, Any]) -> CompletedQuestRecordSchema:

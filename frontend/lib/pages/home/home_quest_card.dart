@@ -9,11 +9,15 @@ class HomeQuestCard extends StatelessWidget {
     required this.quest,
     required this.onTap,
     required this.onDelete,
+    this.selectable = false,
+    this.selected = false,
   });
 
   final QuestItem quest;
   final VoidCallback onTap;
   final VoidCallback onDelete;
+  final bool selectable;
+  final bool selected;
 
   @override
   Widget build(BuildContext context) {
@@ -62,22 +66,25 @@ class HomeQuestCard extends StatelessWidget {
                             ),
                           ),
                           const SizedBox(width: 8),
-                          SizedBox(
-                            width: 24,
-                            height: 24,
-                            child: IconButton(
-                              onPressed: onDelete,
-                              icon: const Icon(Icons.close_rounded),
-                              color: const Color(0xFFC1C6D0),
-                              iconSize: 16,
-                              padding: EdgeInsets.zero,
-                              constraints: const BoxConstraints.tightFor(
-                                width: 24,
-                                height: 24,
+                          if (selectable)
+                            _QuestSelectionMarker(selected: selected)
+                          else
+                            SizedBox(
+                              width: 24,
+                              height: 24,
+                              child: IconButton(
+                                onPressed: onDelete,
+                                icon: const Icon(Icons.close_rounded),
+                                color: const Color(0xFFC1C6D0),
+                                iconSize: 16,
+                                padding: EdgeInsets.zero,
+                                constraints: const BoxConstraints.tightFor(
+                                  width: 24,
+                                  height: 24,
+                                ),
+                                visualDensity: VisualDensity.compact,
                               ),
-                              visualDensity: VisualDensity.compact,
                             ),
-                          ),
                         ],
                       ),
                       const SizedBox(height: 11),
@@ -150,36 +157,63 @@ class HomeQuestCard extends StatelessWidget {
                   ],
                 ),
                 const SizedBox(width: 12),
-                GestureDetector(
-                  onTap: onTap,
-                  child: Container(
-                    width: 31,
-                    height: 31,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: const Color(0xFFD7D1FF),
-                      boxShadow: [
-                        BoxShadow(
-                          color: const Color(
-                            0xFF6F63FF,
-                          ).withValues(alpha: 0.22),
-                          blurRadius: 12,
-                          offset: const Offset(0, 6),
-                        ),
-                      ],
-                    ),
-                    child: const Icon(
-                      Icons.play_arrow_rounded,
-                      color: Color(0xFF111318),
-                      size: 22,
+                if (!selectable)
+                  GestureDetector(
+                    onTap: onTap,
+                    child: Container(
+                      width: 31,
+                      height: 31,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: const Color(0xFFD7D1FF),
+                        boxShadow: [
+                          BoxShadow(
+                            color: const Color(
+                              0xFF6F63FF,
+                            ).withValues(alpha: 0.22),
+                            blurRadius: 12,
+                            offset: const Offset(0, 6),
+                          ),
+                        ],
+                      ),
+                      child: const Icon(
+                        Icons.play_arrow_rounded,
+                        color: Color(0xFF111318),
+                        size: 22,
+                      ),
                     ),
                   ),
-                ),
               ],
             ),
           ),
         ),
       ),
+    );
+  }
+}
+
+class _QuestSelectionMarker extends StatelessWidget {
+  const _QuestSelectionMarker({required this.selected});
+
+  final bool selected;
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 160),
+      width: 24,
+      height: 24,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        color: selected ? const Color(0xFF6F63FF) : const Color(0xFFE3E8F2),
+        border: Border.all(
+          color: selected ? const Color(0xFF6F63FF) : const Color(0xFFC8D0DF),
+          width: 1.5,
+        ),
+      ),
+      child: selected
+          ? const Icon(Icons.check_rounded, size: 16, color: Colors.white)
+          : null,
     );
   }
 }

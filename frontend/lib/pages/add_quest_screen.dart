@@ -167,7 +167,7 @@ class _AddQuestScreenState extends State<AddQuestScreen> {
                     decoration: InputDecoration(
                       hintText: '퀘스트 제목을 입력하세요',
                       filled: true,
-                      fillColor: const Color(0xFFF8FAFD),
+                      fillColor: _AddQuestScreenState._dialogColor,
                       contentPadding: const EdgeInsets.symmetric(
                         horizontal: 16,
                         vertical: 14,
@@ -342,7 +342,7 @@ class _AddQuestScreenState extends State<AddQuestScreen> {
                     decoration: InputDecoration(
                       hintText: '자료 조사 / 10분\n핵심 정리 / 15분',
                       filled: true,
-                      fillColor: const Color(0xFFF8FAFD),
+                      fillColor: _AddQuestScreenState._dialogColor,
                       contentPadding: const EdgeInsets.all(16),
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(16),
@@ -1076,18 +1076,21 @@ class _AiPromptOptionTile extends StatelessWidget {
   Widget build(BuildContext context) {
     return GestureDetector(
       onTap: onTap,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 160),
-        curve: Curves.easeOutCubic,
-        padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(
-          color: selected ? const Color(0xFFE7E3FF) : const Color(0xFFF8FAFD),
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(
-            color: selected ? const Color(0xFF6F63FF) : const Color(0xFFE2E7F0),
-            width: selected ? 1.4 : 1,
+      child: neu.Neumorphic(
+        style: neu.NeumorphicStyle(
+          depth: selected ? -4 : 5,
+          intensity: selected ? 0.82 : 0.92,
+          surfaceIntensity: selected ? 0.12 : 0.2,
+          color: _AddQuestScreenState._dialogColor,
+          shadowDarkColor: selected
+              ? const Color(0x18000000)
+              : const Color(0x33000000),
+          shadowLightColor: Colors.white,
+          boxShape: neu.NeumorphicBoxShape.roundRect(
+            BorderRadius.circular(16),
           ),
         ),
+        padding: const EdgeInsets.all(14),
         child: Row(
           children: [
             Icon(
@@ -1153,18 +1156,21 @@ class _TimeAllocationOptionTile extends StatelessWidget {
   Widget build(BuildContext context) {
     return GestureDetector(
       onTap: onTap,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 160),
-        curve: Curves.easeOutCubic,
-        padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
-        decoration: BoxDecoration(
-          color: selected ? const Color(0xFFE7E3FF) : const Color(0xFFF8FAFD),
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(
-            color: selected ? const Color(0xFF6F63FF) : const Color(0xFFE2E7F0),
-            width: selected ? 1.4 : 1,
+      child: neu.Neumorphic(
+        style: neu.NeumorphicStyle(
+          depth: selected ? -4 : 5,
+          intensity: selected ? 0.82 : 0.92,
+          surfaceIntensity: selected ? 0.12 : 0.2,
+          color: _AddQuestScreenState._dialogColor,
+          shadowDarkColor: selected
+              ? const Color(0x18000000)
+              : const Color(0x33000000),
+          shadowLightColor: Colors.white,
+          boxShape: neu.NeumorphicBoxShape.roundRect(
+            BorderRadius.circular(16),
           ),
         ),
+        padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
         child: Row(
           children: [
             _MiniTimeAllocationGraph(bars: option.bars, selected: selected),

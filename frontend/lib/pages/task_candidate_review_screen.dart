@@ -42,7 +42,6 @@ class _TaskCandidateReviewScreenState extends State<TaskCandidateReviewScreen> {
   static const Color _bodyColor = Color(0xFF4F5B70);
   static const Color _primaryColor = Color(0xFF6F63FF);
   static const Color _secondaryColor = Color(0xFF6B9AF5);
-  static const Color _warningColor = Color(0xFFFFE8C7);
 
   late Set<String> _selectedSubtaskIds;
   late Set<String> _selectedReminderIds;
@@ -231,7 +230,7 @@ class _SummaryCard extends StatelessWidget {
     ];
 
     return NeumorphicRoundedCard(
-      color: const Color(0xFFF8FAFF),
+      color: _TaskCandidateReviewScreenState._backgroundColor,
       padding: const EdgeInsets.all(20),
       borderRadius: 22,
       child: Column(
@@ -257,14 +256,16 @@ class _SummaryCard extends StatelessWidget {
           ),
           if (nextAction != null) ...[
             const SizedBox(height: 18),
-            Container(
+            SizedBox(
               width: double.infinity,
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: const Color(0xFFE9F0FF),
-                borderRadius: BorderRadius.circular(18),
-              ),
-              child: Row(
+              child: NeumorphicRoundedCard(
+                padding: const EdgeInsets.all(16),
+                color: _TaskCandidateReviewScreenState._backgroundColor,
+                depth: -4,
+                intensity: 0.82,
+                surfaceIntensity: 0.12,
+                borderRadius: 18,
+                child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   const Icon(
@@ -298,6 +299,7 @@ class _SummaryCard extends StatelessWidget {
                     ),
                   ),
                 ],
+                ),
               ),
             ),
           ],
@@ -321,19 +323,16 @@ class _TodayRecommendationCard extends StatelessWidget {
     final recommended = candidate.recommendedToday;
     final reason = candidate.todayReason;
 
-    return Container(
+    return SizedBox(
       width: double.infinity,
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: recommended ? const Color(0xFFEAF9F2) : const Color(0xFFF0F2F7),
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(
-          color: recommended
-              ? const Color(0xFFC9ECD9)
-              : const Color(0xFFDDE3EE),
-        ),
-      ),
-      child: Row(
+      child: NeumorphicRoundedCard(
+        padding: const EdgeInsets.all(16),
+        color: _TaskCandidateReviewScreenState._backgroundColor,
+        depth: recommended ? 5 : -3,
+        intensity: 0.86,
+        surfaceIntensity: 0.16,
+        borderRadius: 18,
+        child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Icon(
@@ -371,6 +370,7 @@ class _TodayRecommendationCard extends StatelessWidget {
             ),
           ),
         ],
+        ),
       ),
     );
   }
@@ -383,15 +383,16 @@ class _WarningBand extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+    return SizedBox(
       width: double.infinity,
-      padding: const EdgeInsets.all(15),
-      decoration: BoxDecoration(
-        color: _TaskCandidateReviewScreenState._warningColor,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFFFFCF8A)),
-      ),
-      child: Row(
+      child: NeumorphicRoundedCard(
+        padding: const EdgeInsets.all(15),
+        color: _TaskCandidateReviewScreenState._backgroundColor,
+        depth: -3,
+        intensity: 0.82,
+        surfaceIntensity: 0.12,
+        borderRadius: 16,
+        child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Icon(Icons.warning_amber_rounded, color: Color(0xFFB26900)),
@@ -408,6 +409,7 @@ class _WarningBand extends StatelessWidget {
             ),
           ),
         ],
+        ),
       ),
     );
   }
@@ -535,33 +537,26 @@ class _SelectableTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final color = _TaskCandidateReviewScreenState._backgroundColor;
     return Material(
       color: Colors.transparent,
       child: InkWell(
         borderRadius: BorderRadius.circular(18),
         onTap: enabled ? () => onChanged(!selected) : null,
-        child: Container(
-          width: double.infinity,
-          padding: const EdgeInsets.fromLTRB(12, 12, 14, 12),
-          decoration: BoxDecoration(
-            color: selected
-                ? const Color(0xFFF9FBFF)
-                : enabled
-                ? const Color(0xFFF2F4F9)
-                : const Color(0xFFE8ECF3),
-            borderRadius: BorderRadius.circular(18),
-            border: Border.all(
-              color: selected
-                  ? const Color(0xFFC8D6FF)
-                  : const Color(0xFFDDE3EE),
-            ),
-          ),
+        child: NeumorphicRoundedCard(
+          padding: const EdgeInsets.fromLTRB(10, 10, 12, 10),
+          color: color,
+          depth: selected ? -4 : 5,
+          intensity: 0.86,
+          surfaceIntensity: selected ? 0.1 : 0.16,
+          borderRadius: 18,
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Checkbox(
                 value: selected,
                 activeColor: _TaskCandidateReviewScreenState._primaryColor,
+                checkColor: color,
                 onChanged: enabled
                     ? (value) => onChanged(value ?? false)
                     : null,
@@ -635,98 +630,140 @@ class _ActionPanel extends StatelessWidget {
       top: false,
       child: Container(
         width: double.infinity,
-        padding: const EdgeInsets.fromLTRB(20, 14, 20, 14),
-        decoration: const BoxDecoration(
+        color: _TaskCandidateReviewScreenState._backgroundColor,
+        padding: const EdgeInsets.fromLTRB(20, 10, 20, 14),
+        child: NeumorphicRoundedCard(
           color: _TaskCandidateReviewScreenState._backgroundColor,
-          border: Border(top: BorderSide(color: Color(0xFFDDE3EE))),
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            SizedBox(
-              width: double.infinity,
-              child: FilledButton.icon(
-                onPressed: onSaveAsIs,
-                icon: const Icon(Icons.check_rounded),
-                label: const Text('이대로 저장'),
-                style: FilledButton.styleFrom(
-                  backgroundColor:
-                      _TaskCandidateReviewScreenState._primaryColor,
-                  foregroundColor: Colors.white,
-                  minimumSize: const Size.fromHeight(50),
-                  textStyle: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w800,
+          padding: const EdgeInsets.all(14),
+          borderRadius: 22,
+          depth: 6,
+          intensity: 0.86,
+          surfaceIntensity: 0.14,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton.icon(
+                  onPressed: onSaveAsIs,
+                  icon: const Icon(Icons.check_rounded),
+                  label: const Text('이대로 저장'),
+                  style: FilledButton.styleFrom(
+                    backgroundColor:
+                        _TaskCandidateReviewScreenState._primaryColor,
+                    foregroundColor:
+                        _TaskCandidateReviewScreenState._backgroundColor,
+                    minimumSize: const Size.fromHeight(50),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(18),
+                    ),
+                    textStyle: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w800,
+                    ),
                   ),
                 ),
               ),
-            ),
-            const SizedBox(height: 9),
-            Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: onSaveTodayOnly,
-                    icon: const Icon(Icons.today_outlined, size: 18),
-                    label: const Text('오늘 할 만큼만'),
-                    style: _secondaryButtonStyle(),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: onMakeSmaller,
-                    icon: const Icon(Icons.call_split_rounded, size: 18),
-                    label: const Text('더 작게'),
-                    style: _secondaryButtonStyle(),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: onReduceReminders,
-                    icon: const Icon(
-                      Icons.notifications_paused_outlined,
-                      size: 18,
-                    ),
-                    label: const Text('리마인더 줄이기'),
-                    style: _secondaryButtonStyle(),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: TextButton.icon(
-                    onPressed: onCancel,
-                    icon: const Icon(Icons.close_rounded, size: 18),
-                    label: const Text('취소'),
-                    style: TextButton.styleFrom(
-                      foregroundColor: const Color(0xFF6C7480),
-                      minimumSize: const Size.fromHeight(42),
-                      textStyle: const TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w800,
-                      ),
+              const SizedBox(height: 9),
+              Row(
+                children: [
+                  Expanded(
+                    child: _NeumorphicActionButton(
+                      onPressed: onSaveTodayOnly,
+                      icon: Icons.today_outlined,
+                      label: '오늘 할 만큼만',
                     ),
                   ),
-                ),
-              ],
-            ),
-          ],
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: _NeumorphicActionButton(
+                      onPressed: onMakeSmaller,
+                      icon: Icons.call_split_rounded,
+                      label: '더 작게',
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  Expanded(
+                    child: _NeumorphicActionButton(
+                      onPressed: onReduceReminders,
+                      icon: Icons.notifications_paused_outlined,
+                      label: '리마인더 줄이기',
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: _NeumorphicActionButton(
+                      onPressed: onCancel,
+                      icon: Icons.close_rounded,
+                      label: '취소',
+                      muted: true,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
         ),
       ),
     );
   }
+}
 
-  ButtonStyle _secondaryButtonStyle() {
-    return OutlinedButton.styleFrom(
-      foregroundColor: const Color(0xFF243248),
-      side: const BorderSide(color: Color(0xFFD4DDF0)),
-      minimumSize: const Size.fromHeight(42),
-      textStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w800),
+class _NeumorphicActionButton extends StatelessWidget {
+  const _NeumorphicActionButton({
+    required this.onPressed,
+    required this.icon,
+    required this.label,
+    this.muted = false,
+  });
+
+  final VoidCallback onPressed;
+  final IconData icon;
+  final String label;
+  final bool muted;
+
+  @override
+  Widget build(BuildContext context) {
+    final foreground = muted
+        ? const Color(0xFF6C7480)
+        : _TaskCandidateReviewScreenState._titleColor;
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(16),
+        onTap: onPressed,
+        child: NeumorphicRoundedCard(
+          color: _TaskCandidateReviewScreenState._backgroundColor,
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 11),
+          borderRadius: 16,
+          depth: 3.5,
+          intensity: 0.82,
+          surfaceIntensity: 0.12,
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon, size: 17, color: foreground),
+              const SizedBox(width: 5),
+              Flexible(
+                child: Text(
+                  label,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w800,
+                    color: foreground,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }
@@ -739,12 +776,13 @@ class _MetaChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+    return NeumorphicRoundedCard(
+      color: _TaskCandidateReviewScreenState._backgroundColor,
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
-      decoration: BoxDecoration(
-        color: const Color(0xFFF0F4FF),
-        borderRadius: BorderRadius.circular(999),
-      ),
+      borderRadius: 999,
+      depth: -2.5,
+      intensity: 0.8,
+      surfaceIntensity: 0.1,
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -775,12 +813,13 @@ class _SmallBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+    return NeumorphicRoundedCard(
+      color: _TaskCandidateReviewScreenState._backgroundColor,
       padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
-      decoration: BoxDecoration(
-        color: const Color(0xFFE9F0FF),
-        borderRadius: BorderRadius.circular(999),
-      ),
+      borderRadius: 999,
+      depth: -2,
+      intensity: 0.78,
+      surfaceIntensity: 0.1,
       child: Text(
         label,
         style: const TextStyle(
@@ -800,20 +839,22 @@ class _EmptyState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+    return SizedBox(
       width: double.infinity,
-      padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        color: const Color(0xFFF4F6FA),
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: const Color(0xFFDDE3EE)),
-      ),
-      child: Text(
-        text,
-        style: const TextStyle(
-          fontSize: 14,
-          fontWeight: FontWeight.w700,
-          color: Color(0xFF7B8496),
+      child: NeumorphicRoundedCard(
+        color: _TaskCandidateReviewScreenState._backgroundColor,
+        padding: const EdgeInsets.all(18),
+        borderRadius: 18,
+        depth: -3,
+        intensity: 0.82,
+        surfaceIntensity: 0.1,
+        child: Text(
+          text,
+          style: const TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.w700,
+            color: Color(0xFF7B8496),
+          ),
         ),
       ),
     );

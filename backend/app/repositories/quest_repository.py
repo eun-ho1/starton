@@ -139,6 +139,39 @@ class SupabaseQuestRepository(QuestRepository):
         )
         _ensure_mutation_succeeded(response, "Quest completion update did not affect any rows.")
 
+    def restore_completed(
+        self,
+        user_id: str,
+        quest_id: str,
+        *,
+        elapsed_seconds: int,
+    ) -> QuestItemResponse:
+        response = (
+            self._client.table("quests")
+            .update(
+                {
+                    "status": "active",
+                    "elapsed_seconds": max(0, int(elapsed_seconds or 0)),
+                }
+            )
+            .eq("user_id", user_id)
+            .eq("id", quest_id)
+            .eq("status", "completed")
+            .execute()
+        )
+        _ensure_mutation_succeeded(response, "Quest restore did not affect any rows.")
+        refreshed = self.get_active_quest(user_id, quest_id)
+        return QuestItemResponse(
+            id=refreshed.id,
+            title=refreshed.title,
+            exp=refreshed.exp,
+            difficulty=refreshed.difficulty,
+            category=refreshed.category,
+            elapsedSeconds=refreshed.elapsed_seconds,
+            defaultDurationSeconds=refreshed.default_duration_seconds,
+            dueAt=refreshed.due_at,
+        )
+
     def upsert_notion_quests(
         self,
         *,

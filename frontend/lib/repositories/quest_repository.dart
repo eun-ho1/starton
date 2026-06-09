@@ -85,6 +85,20 @@ class QuestRepository {
     );
   }
 
+  Future<QuestItemResponse> undoCompleteQuest(String questId) async {
+    final response = await _apiClient.postResponse<QuestItemResponse>(
+      '${_questPath(questId)}/undo-complete',
+      body: const <String, dynamic>{},
+      parseData: QuestItemResponse.fromJson,
+    );
+
+    return _requireData(
+      response,
+      code: 'missing_restored_quest',
+      message: 'Server response did not include the restored quest.',
+    );
+  }
+
   void close() {
     if (_ownsApiClient) {
       _apiClient.close();

@@ -16,6 +16,8 @@ class HomeScreen extends StatefulWidget {
     required this.onAddQuestForCategory,
     required this.onQuestTap,
     required this.onDeleteQuest,
+    required this.onDeleteQuests,
+    required this.onUserEnergyChanged,
     required this.onOpenSettings,
     required this.onTabChange,
   });
@@ -26,6 +28,8 @@ class HomeScreen extends StatefulWidget {
   final ValueChanged<String> onAddQuestForCategory;
   final ValueChanged<QuestItem> onQuestTap;
   final ValueChanged<QuestItem> onDeleteQuest;
+  final ValueChanged<List<QuestItem>> onDeleteQuests;
+  final ValueChanged<String> onUserEnergyChanged;
   final VoidCallback onOpenSettings;
   final ValueChanged<int> onTabChange;
 
@@ -39,6 +43,8 @@ class _HomeScreenState extends State<HomeScreen> {
   double _scrollOffset = 0;
   bool _isAtTop = true;
   bool _showCreditAmount = true;
+  bool _bulkDeleteMode = false;
+  final Set<String> _bulkDeleteQuestIds = <String>{};
 
   @override
   void initState() {
@@ -69,6 +75,10 @@ class _HomeScreenState extends State<HomeScreen> {
       records: widget.data.completedQuests,
       now: now,
     );
+    final totalTaskCount = widget.data.quests.length + todayCompletedQuests.length;
+    final completionProgress = totalTaskCount == 0
+        ? 0.0
+        : todayCompletedQuests.length / totalTaskCount;
     final completedQuestRevealProgress = _completedQuestRevealProgress;
 
     // 상단 헤더, 카테고리, 퀘스트 목록, 완료 기록을 세로로 배치합니다.
@@ -80,7 +90,12 @@ class _HomeScreenState extends State<HomeScreen> {
           todayLabel: todayLabel,
           userName: widget.userName,
           credits: widget.data.credits,
+          userEnergy: widget.data.userEnergy,
+          completedTodayCount: todayCompletedQuests.length,
+          totalTaskCount: totalTaskCount,
+          completionProgress: completionProgress,
           showCreditAmount: _showCreditAmount,
+          onEnergyTap: _openEnergyPicker,
           onOpenSettings: widget.onOpenSettings,
         ),
         const SizedBox(height: 24),
@@ -95,6 +110,11 @@ class _HomeScreenState extends State<HomeScreen> {
           questCount: widget.data.quests.length,
           quests: widget.data.quests,
           completedRecords: widget.data.completedQuests,
+          bulkDeleteMode: _bulkDeleteMode,
+          selectedDeleteCount: _bulkDeleteQuestIds.length,
+          onToggleBulkDelete: _toggleBulkDeleteMode,
+          onConfirmBulkDelete: _confirmBulkDelete,
+          onCancelBulkDelete: _cancelBulkDelete,
         ),
         const SizedBox(height: 12),
         HomeQuestList(
@@ -102,6 +122,9 @@ class _HomeScreenState extends State<HomeScreen> {
           onAddQuest: widget.onAddQuest,
           onQuestTap: widget.onQuestTap,
           onDeleteQuest: widget.onDeleteQuest,
+          bulkDeleteMode: _bulkDeleteMode,
+          selectedQuestIds: _bulkDeleteQuestIds,
+          onToggleQuestSelection: _toggleQuestSelection,
         ),
         if (todayCompletedQuests.isNotEmpty) ...[
           const SizedBox(height: 8),
@@ -191,6 +214,75 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
+  Future<void> _openEnergyPicker() async {
+    final selected = await showModalBottomSheet<String>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (context) => _EnergyPickerSheet(currentEnergy: widget.data.userEnergy),
+    );
+    if (!mounted || selected == null || selected == widget.data.userEnergy) {
+      return;
+    }
+    widget.onUserEnergyChanged(selected);
+  }
+
+  void _toggleBulkDeleteMode() {
+    setState(() {
+      _bulkDeleteMode = !_bulkDeleteMode;
+      _bulkDeleteQuestIds.clear();
+    });
+  }
+
+  void _cancelBulkDelete() {
+    setState(() {
+      _bulkDeleteMode = false;
+      _bulkDeleteQuestIds.clear();
+    });
+  }
+
+  void _toggleQuestSelection(QuestItem quest) {
+    setState(() {
+      if (!_bulkDeleteQuestIds.add(quest.id)) {
+        _bulkDeleteQuestIds.remove(quest.id);
+      }
+    });
+  }
+
+  Future<void> _confirmBulkDelete() async {
+    final selectedQuests = widget.data.quests
+        .where((quest) => _bulkDeleteQuestIds.contains(quest.id))
+        .toList();
+    if (selectedQuests.isEmpty) {
+      return;
+    }
+
+    final shouldDelete = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFFF1F3F8),
+        title: const Text('퀘스트 일괄 삭제'),
+        content: Text('${selectedQuests.length}개의 퀘스트를 삭제할까요?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('취소'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            style: TextButton.styleFrom(foregroundColor: const Color(0xFFE55353)),
+            child: const Text('삭제'),
+          ),
+        ],
+      ),
+    );
+    if (!mounted || shouldDelete != true) {
+      return;
+    }
+
+    widget.onDeleteQuests(selectedQuests);
+    _cancelBulkDelete();
+  }
+
   void _handleScroll() {
     if (!_scrollController.hasClients) {
       return;
@@ -252,5 +344,65 @@ class _HomeScreenState extends State<HomeScreen> {
           1.0,
         );
     return Curves.easeOutCubic.transform(rawProgress);
+  }
+}
+
+class _EnergyPickerSheet extends StatelessWidget {
+  const _EnergyPickerSheet({required this.currentEnergy});
+
+  final String currentEnergy;
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      top: false,
+      child: Container(
+        margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+        padding: const EdgeInsets.fromLTRB(20, 18, 20, 20),
+        decoration: BoxDecoration(
+          color: const Color(0xFFF1F3F8),
+          borderRadius: BorderRadius.circular(26),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.12),
+              blurRadius: 30,
+              offset: const Offset(0, 16),
+            ),
+          ],
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const Text(
+              '현재 에너지 조정',
+              style: TextStyle(
+                color: Color(0xFF172033),
+                fontSize: 18,
+                fontWeight: FontWeight.w900,
+              ),
+            ),
+            const SizedBox(height: 12),
+            for (final item in const [
+              ('low', '낮음', Icons.battery_1_bar_rounded),
+              ('medium', '보통', Icons.battery_4_bar_rounded),
+              ('high', '높음', Icons.battery_full_rounded),
+            ]) ...[
+              ListTile(
+                onTap: () => Navigator.of(context).pop(item.$1),
+                leading: Icon(item.$3, color: const Color(0xFF6F63FF)),
+                title: Text(
+                  item.$2,
+                  style: const TextStyle(fontWeight: FontWeight.w800),
+                ),
+                trailing: currentEnergy == item.$1
+                    ? const Icon(Icons.check_rounded, color: Color(0xFF6F63FF))
+                    : null,
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
   }
 }

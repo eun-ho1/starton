@@ -1,6 +1,7 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from datetime import datetime
+from typing import Any
 
 from app.schemas.dungeon import DungeonClearResponse, DungeonStatusResponse
 from app.schemas.leaderboard import LeaderboardResponse
@@ -93,6 +94,16 @@ class QuestRepository(ABC):
     def mark_completed(self, user_id: str, quest_id: str) -> None:
         raise NotImplementedError
 
+    @abstractmethod
+    def restore_completed(
+        self,
+        user_id: str,
+        quest_id: str,
+        *,
+        elapsed_seconds: int,
+    ) -> QuestItemResponse:
+        raise NotImplementedError
+
 
 class CompletedQuestRepository(ABC):
     @abstractmethod
@@ -128,6 +139,32 @@ class CompletedQuestRepository(ABC):
         activity_date: datetime,
         subtitle: str,
         exp: int,
+    ) -> None:
+        raise NotImplementedError
+
+    @abstractmethod
+    def get_latest_completed_record(
+        self,
+        user_id: str,
+        *,
+        quest_id: str | None = None,
+        task_id: str | None = None,
+    ) -> dict[str, Any]:
+        raise NotImplementedError
+
+    @abstractmethod
+    def delete_completed_record(
+        self,
+        user_id: str,
+        completed_quest_id: str,
+    ) -> None:
+        raise NotImplementedError
+
+    @abstractmethod
+    def delete_recent_activity_for_completed_quest(
+        self,
+        user_id: str,
+        completed_quest_id: str,
     ) -> None:
         raise NotImplementedError
 

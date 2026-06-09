@@ -4,6 +4,7 @@ class QuestTimerContentCard extends StatelessWidget {
   const QuestTimerContentCard({
     super.key,
     this.useLandscapeLayout = false,
+    required this.header,
     required this.questSummary,
     required this.countdown,
     required this.actionButtons,
@@ -12,6 +13,7 @@ class QuestTimerContentCard extends StatelessWidget {
   });
 
   final bool useLandscapeLayout;
+  final Widget header;
   final Widget questSummary;
   final Widget countdown;
   final Widget actionButtons;
@@ -22,27 +24,32 @@ class QuestTimerContentCard extends StatelessWidget {
   Widget build(BuildContext context) {
     if (useLandscapeLayout) {
       return Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Expanded(
             flex: 6,
-            child: Align(
-              alignment: Alignment.topCenter,
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 320),
-                child: Column(
-                  children: [
-                    questSummary,
-                    const SizedBox(height: 22),
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Expanded(child: proofSection),
-                        const SizedBox(width: 12),
-                        Expanded(child: categoryTimes),
-                      ],
-                    ),
-                  ],
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.only(right: 4, bottom: 8),
+              child: Align(
+                alignment: Alignment.topCenter,
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 360),
+                  child: Column(
+                    children: [
+                      header,
+                      const SizedBox(height: 18),
+                      questSummary,
+                      const SizedBox(height: 22),
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Expanded(child: proofSection),
+                          const SizedBox(width: 12),
+                          Expanded(child: categoryTimes),
+                        ],
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),
@@ -50,15 +57,24 @@ class QuestTimerContentCard extends StatelessWidget {
           const SizedBox(width: 26),
           Expanded(
             flex: 4,
-            child: Column(
-              children: [
-                countdown,
-                const SizedBox(height: 14),
-                SizedBox(
-                  width: double.infinity,
-                  child: FittedBox(fit: BoxFit.scaleDown, child: actionButtons),
+            child: Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 300),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    countdown,
+                    const SizedBox(height: 14),
+                    SizedBox(
+                      width: double.infinity,
+                      child: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: actionButtons,
+                      ),
+                    ),
+                  ],
                 ),
-              ],
+              ),
             ),
           ),
         ],
@@ -67,6 +83,8 @@ class QuestTimerContentCard extends StatelessWidget {
 
     return Column(
       children: [
+        header,
+        const SizedBox(height: 18),
         questSummary,
         const SizedBox(height: 28),
         countdown,

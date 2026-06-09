@@ -45,6 +45,13 @@ const _systemUiOverlayStyle = SystemUiOverlayStyle(
 );
 const Duration _questAutoAdvanceRestDuration = Duration(seconds: 15);
 
+enum _CompletionAfterAction {
+  saveOnly,
+  undo,
+  continueRemaining,
+  postponeRemaining,
+}
+
 class AdFocusApp extends StatelessWidget {
   const AdFocusApp({
     super.key,
@@ -482,6 +489,8 @@ class _AdFocusShellState extends State<AdFocusShell>
         onAddQuestForCategory: _openAddQuestForCategory,
         onQuestTap: _openQuestTimer,
         onDeleteQuest: _deleteQuest,
+        onDeleteQuests: _deleteQuests,
+        onUserEnergyChanged: _updateUserEnergy,
         onOpenSettings: _openSettings,
         onTabChange: _changeTab,
       ),
@@ -491,7 +500,10 @@ class _AdFocusShellState extends State<AdFocusShell>
         onSkipToday: _skipRetryToday,
       ),
       RankingScreen(data: _localData, leaderboard: _leaderboard),
-      RecordScreen(data: _recordSummaryData),
+      RecordScreen(
+        data: _recordSummaryData,
+        onUndoCompletedQuest: _undoCompletedQuest,
+      ),
     ];
 
     final isAiQuestBusy = _isCreatingAiQuest || _isSavingAiQuest;
@@ -583,9 +595,7 @@ class _AdFocusShellState extends State<AdFocusShell>
   }
 
   AppLocalData get _recordSummaryData {
-    return _localData.copyWith(
-      completedQuests: const <CompletedQuestRecord>[],
-    );
+    return _localData;
   }
 
   Future<void> _openAddQuest() async {
@@ -747,6 +757,7 @@ class _AdFocusShellState extends State<AdFocusShell>
           text: _taskIntakeTextFromDraft(draft),
           source: 'manual',
           clientTimezone: 'Asia/Seoul',
+          userContext: _taskIntakeUserContextForDraft(draft),
           clientMetadata: _taskIntakeMetadataFromDraft(draft),
         ),
       );
@@ -782,6 +793,39 @@ class _AdFocusShellState extends State<AdFocusShell>
       if (draft.aiSubtaskPrompt != null)
         'subtask_generation_prompt': draft.aiSubtaskPrompt,
     };
+  }
+
+  TaskIntakeUserContext _taskIntakeUserContextForDraft(QuestItem draft) {
+    final todayCompletedCount = _todayCompletedRecords().length;
+    final totalTaskCount = _localData.quests.length + todayCompletedCount;
+    final remainingSeconds = _localData.quests.fold<int>(0, (total, quest) {
+      final remaining = quest.effectiveDurationSeconds - quest.elapsedSeconds;
+      return total + (remaining > 0 ? remaining : 0);
+    });
+
+    return TaskIntakeUserContext(
+      energyNow: _localData.userEnergy,
+      availableMinutesToday: remainingSeconds <= 0
+          ? null
+          : (remainingSeconds / 60).ceil(),
+      extra: {
+        'home_total_task_count': totalTaskCount,
+        'home_completed_today_count': todayCompletedCount,
+        'home_pending_task_count': _localData.quests.length,
+        'draft_default_duration_seconds': draft.defaultDurationSeconds,
+      },
+    );
+  }
+
+  List<CompletedQuestRecord> _todayCompletedRecords() {
+    final now = DateTime.now();
+    return _localData.completedQuests.where((record) {
+      final completedAt = DateTime.tryParse(record.completedAt)?.toLocal();
+      return completedAt != null &&
+          completedAt.year == now.year &&
+          completedAt.month == now.month &&
+          completedAt.day == now.day;
+    }).toList();
   }
 
   String _taskIntakeTextFromDraft(QuestItem draft) {
@@ -983,13 +1027,38 @@ class _AdFocusShellState extends State<AdFocusShell>
     }
 
     if (result case CompletedQuestRecord completedRecord) {
-      final nextQuest = _nextQuestAfter(completedRecord.questId);
+      final originalQuest = _findQuest(completedRecord.questId);
+      final completionAction = await _showCompletionActionDialog(
+        completedRecord,
+        originalQuest: originalQuest,
+      );
+      if (!mounted || completionAction == null) {
+        _updateQuest(_copyQuestWithElapsed(completedRecord), syncServer: false);
+        return;
+      }
+      if (completionAction == _CompletionAfterAction.undo) {
+        _updateQuest(_copyQuestWithElapsed(completedRecord), syncServer: false);
+        _showStyledSnackBar('완료를 취소하고 진행 상태로 돌렸어요.', centerText: true);
+        return;
+      }
+
+      final continuationQuest = _continuationQuestFromRemaining(
+        originalQuest: originalQuest,
+        completedRecord: completedRecord,
+        postponeUntilTomorrow:
+            completionAction == _CompletionAfterAction.postponeRemaining,
+      );
+      final nextQuest = continuationQuest ?? _nextQuestAfter(completedRecord.questId);
       final savedRecord = await _completeQuest(completedRecord);
       if (!mounted || savedRecord == null) {
         return;
       }
 
-      _setLocalData(_store.completeQuest(_localData, savedRecord));
+      var nextData = _store.completeQuest(_localData, savedRecord);
+      if (continuationQuest != null) {
+        nextData = nextData.copyWith(quests: [continuationQuest, ...nextData.quests]);
+      }
+      _setLocalData(nextData);
       unawaited(_refreshServerProgressData());
       _triggerQuestCelebration();
       _scheduleQuestAutoAdvance(nextQuest?.id);
@@ -1007,6 +1076,108 @@ class _AdFocusShellState extends State<AdFocusShell>
     if (result case QuestItem updatedQuest) {
       _updateQuest(updatedQuest);
     }
+  }
+
+  Future<_CompletionAfterAction?> _showCompletionActionDialog(
+    CompletedQuestRecord record, {
+    required QuestItem? originalQuest,
+  }) {
+    final remainingCount = _remainingSubtasks(originalQuest, record).length;
+    return showDialog<_CompletionAfterAction>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFFF1F3F8),
+        title: const Text('퀘스트 완료'),
+        content: Text(
+          remainingCount == 0
+              ? '완료로 저장할까요?'
+              : '아직 남은 subtask $remainingCount개가 있어요. 완료 저장 후 남은 단계만 새 퀘스트로 이어갈 수 있어요.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(_CompletionAfterAction.undo),
+            child: const Text('완료 취소하기'),
+          ),
+          if (remainingCount > 0)
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(
+                _CompletionAfterAction.continueRemaining,
+              ),
+              child: const Text('쉬고 이어서 하기'),
+            ),
+          if (remainingCount > 0)
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(
+                _CompletionAfterAction.postponeRemaining,
+              ),
+              child: const Text('내일로 미루기'),
+            ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(_CompletionAfterAction.saveOnly),
+            style: FilledButton.styleFrom(
+              backgroundColor: const Color(0xFF6F63FF),
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('완료 저장'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  QuestItem? _continuationQuestFromRemaining({
+    required QuestItem? originalQuest,
+    required CompletedQuestRecord completedRecord,
+    required bool postponeUntilTomorrow,
+  }) {
+    final remaining = _remainingSubtasks(originalQuest, completedRecord);
+    if (remaining.isEmpty) {
+      return null;
+    }
+
+    final now = DateTime.now();
+    final normalizedSubtasks = [
+      for (var index = 0; index < remaining.length; index += 1)
+        remaining[index].copyWith(
+          id: 'continued-${now.microsecondsSinceEpoch}-$index',
+          orderIndex: index,
+          status: 'todo',
+          isNextAction: index == 0,
+          completedAt: null,
+          elapsedSeconds: 0,
+        ),
+    ];
+    final durationSeconds = normalizedSubtasks.fold<int>(
+      0,
+      (total, subtask) => total + subtask.plannedDurationSeconds,
+    );
+
+    return QuestItem(
+      id: 'continued-${now.microsecondsSinceEpoch}',
+      title: originalQuest?.title ?? completedRecord.title,
+      exp: originalQuest?.exp ?? completedRecord.earnedExp,
+      difficulty: originalQuest?.difficulty ?? completedRecord.difficulty,
+      category: originalQuest?.category ?? completedRecord.category,
+      elapsedSeconds: 0,
+      defaultDurationSeconds: durationSeconds,
+      dueDate: postponeUntilTomorrow
+          ? normalizeQuestDueDate(now.add(const Duration(days: 1)))
+          : originalQuest?.dueDate,
+      subtasks: normalizedSubtasks,
+      activeSubtaskId: normalizedSubtasks.first.id,
+      syncTarget: questSyncTargetLocal,
+    );
+  }
+
+  List<QuestSubtask> _remainingSubtasks(
+    QuestItem? originalQuest,
+    CompletedQuestRecord record,
+  ) {
+    final sourceSubtasks = originalQuest?.subtasks.isNotEmpty == true
+        ? originalQuest!.subtasks
+        : record.subtasks;
+    return sourceSubtasks.where((subtask) => !subtask.isDone).toList();
   }
 
   Future<void> _openSettings() async {
@@ -1039,6 +1210,16 @@ class _AdFocusShellState extends State<AdFocusShell>
     await _stopQuestTimerIfActive(quest.id);
 
     final questRepository = _questRepository;
+    final taskIntakeRepository = _taskIntakeRepository;
+    if (quest.isTaskBacked && taskIntakeRepository != null) {
+      try {
+        await taskIntakeRepository.deleteTask(quest.id);
+      } catch (error) {
+        _showQuestSyncError('Task를 삭제하지 못했어요.', error);
+        return;
+      }
+    }
+
     if (questRepository != null && quest.syncsWithQuestApi) {
       try {
         await questRepository.deleteQuest(quest.id);
@@ -1057,6 +1238,59 @@ class _AdFocusShellState extends State<AdFocusShell>
         quests: _localData.quests.where((item) => item.id != quest.id).toList(),
       ),
     );
+  }
+
+  void _deleteQuests(List<QuestItem> quests) {
+    unawaited(_deleteQuestsAsync(quests));
+  }
+
+  Future<void> _deleteQuestsAsync(List<QuestItem> quests) async {
+    final questIdsToRemove = <String>{};
+    for (final quest in quests) {
+      await _stopQuestTimerIfActive(quest.id);
+
+      final taskIntakeRepository = _taskIntakeRepository;
+      if (quest.isTaskBacked && taskIntakeRepository != null) {
+        try {
+          await taskIntakeRepository.deleteTask(quest.id);
+        } catch (error) {
+          _showQuestSyncError('일부 Task를 삭제하지 못했어요.', error);
+          continue;
+        }
+      }
+
+      final questRepository = _questRepository;
+      if (questRepository != null && quest.syncsWithQuestApi) {
+        try {
+          await questRepository.deleteQuest(quest.id);
+        } catch (error) {
+          _showQuestSyncError('일부 퀘스트를 삭제하지 못했어요.', error);
+          continue;
+        }
+      }
+      questIdsToRemove.add(quest.id);
+    }
+
+    if (!mounted || questIdsToRemove.isEmpty) {
+      return;
+    }
+
+    _setLocalData(
+      _localData.copyWith(
+        quests: _localData.quests
+            .where((quest) => !questIdsToRemove.contains(quest.id))
+            .toList(),
+      ),
+    );
+    _showStyledSnackBar(
+      '${questIdsToRemove.length}개 퀘스트를 삭제했어요.',
+      centerText: true,
+      compact: true,
+    );
+  }
+
+  void _updateUserEnergy(String energy) {
+    _setLocalData(_localData.copyWith(userEnergy: energy));
   }
 
   void _updateQuest(
@@ -1990,7 +2224,10 @@ class _AdFocusShellState extends State<AdFocusShell>
             proofImagePath: completedRecord.proofImagePath,
           ),
         );
-        return CompletedQuestRecord.fromApiResponse(savedRecord);
+        return CompletedQuestRecord.fromApiResponse(savedRecord).copyWith(
+          subtasks: completedRecord.subtasks,
+          syncTarget: completedRecord.syncTarget,
+        );
       } catch (error) {
         _showQuestSyncError(
           'Task completion could not be saved to the server.',
@@ -2013,7 +2250,10 @@ class _AdFocusShellState extends State<AdFocusShell>
           proofImagePath: completedRecord.proofImagePath,
         ),
       );
-      return CompletedQuestRecord.fromApiResponse(savedRecord);
+      return CompletedQuestRecord.fromApiResponse(savedRecord).copyWith(
+        subtasks: completedRecord.subtasks,
+        syncTarget: completedRecord.syncTarget,
+      );
     } catch (error) {
       _showQuestSyncError('퀘스트 완료를 서버에 저장하지 못했어요.', error);
       _updateQuest(_copyQuestWithElapsed(completedRecord), syncServer: false);
@@ -2145,6 +2385,96 @@ class _AdFocusShellState extends State<AdFocusShell>
     }
 
     debugPrint(buffer.toString());
+  }
+
+  Future<void> _undoCompletedQuest(CompletedQuestRecord record) async {
+    final shouldUndo = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFFF1F3F8),
+        title: const Text('완료 취소'),
+        content: Text('${record.title} 완료를 취소하고 진행중 퀘스트로 되돌릴까요?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('닫기'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            style: FilledButton.styleFrom(
+              backgroundColor: const Color(0xFF6F63FF),
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('완료 취소'),
+          ),
+        ],
+      ),
+    );
+    if (!mounted || shouldUndo != true) {
+      return;
+    }
+
+    final undone = await _undoCompletedQuestOnServer(record);
+    if (!mounted || !undone) {
+      return;
+    }
+
+    _setLocalData(_store.undoCompleteQuest(_localData, record));
+    unawaited(_refreshServerProgressData());
+    _showStyledSnackBar('완료를 취소하고 진행중으로 되돌렸어요.', centerText: true);
+  }
+
+  Future<bool> _undoCompletedQuestOnServer(CompletedQuestRecord record) async {
+    if (!_usesServerData) {
+      return true;
+    }
+
+    final syncTarget = record.syncTarget;
+    if (syncTarget == questSyncTargetTask) {
+      return _undoCompletedTaskOnServer(record.questId);
+    }
+    if (syncTarget == questSyncTargetQuest) {
+      return _undoCompletedLegacyQuestOnServer(record.questId);
+    }
+
+    final taskUndone = await _undoCompletedTaskOnServer(record.questId, quiet: true);
+    if (taskUndone) {
+      return true;
+    }
+    return _undoCompletedLegacyQuestOnServer(record.questId);
+  }
+
+  Future<bool> _undoCompletedTaskOnServer(
+    String taskId, {
+    bool quiet = false,
+  }) async {
+    final repository = _taskIntakeRepository;
+    if (repository == null) {
+      return !_usesServerData;
+    }
+    try {
+      await repository.undoCompleteTask(taskId);
+      return true;
+    } catch (error) {
+      if (!quiet) {
+        _showQuestSyncError('Task 완료 취소를 서버에 저장하지 못했어요.', error);
+      }
+      return false;
+    }
+  }
+
+  Future<bool> _undoCompletedLegacyQuestOnServer(String questId) async {
+    final repository = _questRepository;
+    if (repository == null) {
+      return !_usesServerData;
+    }
+    try {
+      await repository.undoCompleteQuest(questId);
+      return true;
+    } catch (error) {
+      _showQuestSyncError('퀘스트 완료 취소를 서버에 저장하지 못했어요.', error);
+      return false;
+    }
   }
 
   void _triggerQuestCelebration() {

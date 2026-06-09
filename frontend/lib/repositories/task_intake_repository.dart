@@ -122,6 +122,29 @@ class TaskIntakeRepository {
     );
   }
 
+  Future<void> deleteTask(String taskId) async {
+    final response = await _apiClient.deleteResponse<Object>(
+      '/tasks/${Uri.encodeComponent(taskId)}',
+      parseData: (json) => json ?? const <String, dynamic>{},
+    );
+
+    _requireSuccess(response);
+  }
+
+  Future<TaskResponse> undoCompleteTask(String taskId) async {
+    final response = await _apiClient.postResponse<TaskResponse>(
+      '/tasks/${Uri.encodeComponent(taskId)}/undo-complete',
+      body: const <String, dynamic>{},
+      parseData: TaskResponse.fromJson,
+    );
+
+    return _requireData(
+      response,
+      code: 'missing_restored_task',
+      message: 'Server response did not include the restored task.',
+    );
+  }
+
   Future<CompletedQuestRecordResponse> completeTask(
     String taskId, {
     required int elapsedSeconds,
@@ -177,6 +200,18 @@ class TaskIntakeRepository {
     throw TaskIntakeRepositoryException(
       code: error?.code ?? code,
       message: error?.message ?? message,
+    );
+  }
+
+  void _requireSuccess(ApiResponse<Object> response) {
+    if (response.success) {
+      return;
+    }
+
+    final error = response.error;
+    throw TaskIntakeRepositoryException(
+      code: error?.code ?? 'task_request_failed',
+      message: error?.message ?? 'Task request failed.',
     );
   }
 }

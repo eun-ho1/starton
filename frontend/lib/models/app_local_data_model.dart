@@ -31,6 +31,7 @@ class AppLocalData {
     required this.completedQuests,
     required this.quests,
     required this.clearedDungeonIds,
+    required this.userEnergy,
     required this.previousWeeklyCompletionRate,
     required this.dailyResetKey,
     required this.weeklyResetKey,
@@ -64,6 +65,7 @@ class AppLocalData {
   final List<CompletedQuestRecord> completedQuests;
   final List<QuestItem> quests;
   final List<String> clearedDungeonIds;
+  final String userEnergy;
   final int previousWeeklyCompletionRate;
   final String dailyResetKey;
   final String weeklyResetKey;
@@ -98,6 +100,7 @@ class AppLocalData {
       completedQuests: const [],
       quests: const [],
       clearedDungeonIds: const [],
+      userEnergy: 'medium',
       previousWeeklyCompletionRate: 0,
       dailyResetKey: '',
       weeklyResetKey: '',
@@ -133,6 +136,7 @@ class AppLocalData {
     List<CompletedQuestRecord>? completedQuests,
     List<QuestItem>? quests,
     List<String>? clearedDungeonIds,
+    String? userEnergy,
     int? previousWeeklyCompletionRate,
     String? dailyResetKey,
     String? weeklyResetKey,
@@ -166,6 +170,7 @@ class AppLocalData {
       completedQuests: completedQuests ?? this.completedQuests,
       quests: quests ?? this.quests,
       clearedDungeonIds: clearedDungeonIds ?? this.clearedDungeonIds,
+      userEnergy: _normalizeUserEnergy(userEnergy ?? this.userEnergy),
       previousWeeklyCompletionRate:
           previousWeeklyCompletionRate ?? this.previousWeeklyCompletionRate,
       dailyResetKey: dailyResetKey ?? this.dailyResetKey,
@@ -205,6 +210,7 @@ class AppLocalData {
       'completedQuests': completedQuests.map((item) => item.toJson()).toList(),
       'quests': quests.map((item) => item.toJson()).toList(),
       'clearedDungeonIds': clearedDungeonIds,
+      'userEnergy': userEnergy,
       'previousWeeklyCompletionRate': previousWeeklyCompletionRate,
       'dailyResetKey': dailyResetKey,
       'weeklyResetKey': weeklyResetKey,
@@ -281,6 +287,7 @@ class AppLocalData {
           ((json['clearedDungeonIds'] as List<dynamic>?) ?? const [])
               .map((item) => item as String)
               .toList(),
+      userEnergy: _normalizeUserEnergy(json['userEnergy'] as String?),
       previousWeeklyCompletionRate:
           json['previousWeeklyCompletionRate'] as int? ??
           defaults.previousWeeklyCompletionRate,
@@ -291,4 +298,12 @@ class AppLocalData {
           json['monthlyResetKey'] as String? ?? defaults.monthlyResetKey,
     );
   }
+}
+
+String _normalizeUserEnergy(String? value) {
+  return switch ((value ?? '').trim().toLowerCase()) {
+    'low' => 'low',
+    'high' => 'high',
+    _ => 'medium',
+  };
 }

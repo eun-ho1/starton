@@ -4,25 +4,29 @@ import 'package:start_on/pages/record/record_empty_card.dart';
 import 'package:start_on/pages/record/record_recent_record_card.dart';
 
 class RecordRecentActivityList extends StatelessWidget {
-  const RecordRecentActivityList({super.key, required this.recent});
+  const RecordRecentActivityList({
+    super.key,
+    required this.records,
+    required this.onUndoCompletedQuest,
+  });
 
-  final List<RecentActivity> recent;
+  final List<CompletedQuestRecord> records;
+  final ValueChanged<CompletedQuestRecord> onUndoCompletedQuest;
 
   @override
   Widget build(BuildContext context) {
-    if (recent.isEmpty) {
+    if (records.isEmpty) {
       return const RecordEmptyCard();
     }
 
     return Column(
       children: [
-        for (var index = 0; index < recent.length; index++) ...[
+        for (var index = 0; index < records.length; index++) ...[
           RecordRecentRecordCard(
-            date: recent[index].date,
-            subtitle: recent[index].subtitle,
-            exp: '+${recent[index].exp}',
+            record: records[index],
+            onUndo: () => onUndoCompletedQuest(records[index]),
           ),
-          if (index != recent.length - 1) const SizedBox(height: 12),
+          if (index != records.length - 1) const SizedBox(height: 12),
         ],
       ],
     );

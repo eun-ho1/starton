@@ -95,6 +95,29 @@ LocalDataLevelState applyLocalDataExp({
   );
 }
 
+LocalDataLevelState removeLocalDataExp({
+  required int level,
+  required int currentExp,
+  required int lostExp,
+}) {
+  var nextLevel = math.max(0, level);
+  var nextCurrentExp = math.max(0, currentExp);
+  var remainingLoss = math.max(0, lostExp);
+
+  while (remainingLoss > nextCurrentExp && nextLevel > 0) {
+    remainingLoss -= nextCurrentExp;
+    nextLevel -= 1;
+    nextCurrentExp = requiredExpForLevel(nextLevel);
+  }
+
+  nextCurrentExp = math.max(0, nextCurrentExp - remainingLoss);
+  return LocalDataLevelState(
+    level: nextLevel,
+    currentExp: nextCurrentExp,
+    maxExp: requiredExpForLevel(nextLevel),
+  );
+}
+
 LocalDataCategoryStats applyLocalDataCategoryStats({
   required int diligenceStat,
   required int orderStat,
@@ -130,6 +153,43 @@ LocalDataCategoryStats applyLocalDataCategoryStats({
         : intelligenceStat,
     healthStat: normalizedCategory == 'life'
         ? math.min(100, healthStat + categoryGain)
+        : healthStat,
+  );
+}
+
+LocalDataCategoryStats subtractLocalDataCategoryStats({
+  required int diligenceStat,
+  required int orderStat,
+  required int intelligenceStat,
+  required int healthStat,
+  required String category,
+  required String difficulty,
+}) {
+  final diligenceGain = switch (difficulty) {
+    '쉬움' => 4,
+    '보통' => 6,
+    _ => 9,
+  };
+  final categoryGain = switch (difficulty) {
+    '쉬움' => 5,
+    '보통' => 8,
+    _ => 12,
+  };
+  final normalizedCategory = normalizeQuestCategory(category);
+
+  return LocalDataCategoryStats(
+    diligenceStat: math.max(
+      0,
+      diligenceStat - diligenceGain - (normalizedCategory == 'work' ? categoryGain : 0),
+    ),
+    orderStat: normalizedCategory == 'home'
+        ? math.max(0, orderStat - categoryGain)
+        : orderStat,
+    intelligenceStat: normalizedCategory == 'study'
+        ? math.max(0, intelligenceStat - categoryGain)
+        : intelligenceStat,
+    healthStat: normalizedCategory == 'life'
+        ? math.max(0, healthStat - categoryGain)
         : healthStat,
   );
 }

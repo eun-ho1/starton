@@ -4,13 +4,18 @@ import 'package:start_on/pages/record/record_sections.dart';
 import 'package:start_on/widgets/common.dart';
 
 class RecordScreen extends StatelessWidget {
-  const RecordScreen({super.key, required this.data});
+  const RecordScreen({
+    super.key,
+    required this.data,
+    required this.onUndoCompletedQuest,
+  });
 
   final AppLocalData data;
+  final ValueChanged<CompletedQuestRecord> onUndoCompletedQuest;
 
   @override
   Widget build(BuildContext context) {
-    final recent = data.recentActivities;
+    final completedRecords = data.completedQuests;
 
     return Scaffold(
       backgroundColor: const Color(0xFFF1F3F8),
@@ -59,7 +64,10 @@ class RecordScreen extends StatelessWidget {
                 title: '최근 활동',
               ),
               const SizedBox(height: 14),
-              RecordRecentActivityList(recent: recent),
+              RecordRecentActivityList(
+                records: completedRecords,
+                onUndoCompletedQuest: onUndoCompletedQuest,
+              ),
             ],
           ),
         ),

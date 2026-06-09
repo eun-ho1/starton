@@ -112,6 +112,7 @@ AppLocalData _sampleData() {
     completedQuests: const [],
     quests: const [],
     clearedDungeonIds: const ['d-1'],
+    userEnergy: 'medium',
     previousWeeklyCompletionRate: 58,
     dailyResetKey: '',
     weeklyResetKey: '',

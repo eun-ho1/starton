@@ -31,60 +31,64 @@ class HomeCategoryCard extends StatelessWidget {
     final totalCount = completedCount + pendingCount;
     final progress = totalCount == 0 ? 0.0 : completedCount / totalCount;
     final progressLabel = '$completedCount/$totalCount';
-    final cardColor = totalCount == 0
-        ? backgroundColor.withValues(alpha: 0.46)
-        : backgroundColor;
+    final emptyOpacity = totalCount == 0 ? 0.46 : 1.0;
 
     return SizedBox(
       height: 104,
       child: Padding(
         padding: const EdgeInsets.fromLTRB(1, 1, 3, 4),
-        child: neu.Neumorphic(
-          style: neu.NeumorphicStyle(
-            depth: 6,
-            intensity: 1,
-            surfaceIntensity: 0.44,
-            lightSource: neu.LightSource.topLeft,
-            color: cardColor,
-            shadowLightColor: Colors.white,
-            shadowDarkColor: const Color(0xFF6E7685).withValues(alpha: 0.54),
-            boxShape: neu.NeumorphicBoxShape.roundRect(
-              BorderRadius.circular(13),
+        child: AnimatedOpacity(
+          key: ValueKey('category-card-$title-$totalCount'),
+          duration: const Duration(milliseconds: 220),
+          curve: Curves.easeOutCubic,
+          opacity: emptyOpacity,
+          child: neu.Neumorphic(
+            style: neu.NeumorphicStyle(
+              depth: 6,
+              intensity: 1,
+              surfaceIntensity: 0.44,
+              lightSource: neu.LightSource.topLeft,
+              color: backgroundColor,
+              shadowLightColor: Colors.white,
+              shadowDarkColor: const Color(0xFF6E7685).withValues(alpha: 0.54),
+              boxShape: neu.NeumorphicBoxShape.roundRect(
+                BorderRadius.circular(13),
+              ),
             ),
-          ),
-          child: Material(
-            color: Colors.transparent,
-            child: InkWell(
-              onTap: onTap,
-              borderRadius: BorderRadius.circular(13),
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(15, 15, 13, 13),
-                child: Stack(
-                  children: [
-                    Text(
-                      title.toUpperCase(),
-                      style: const TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w900,
-                        color: Color(0xFF090A0D),
-                        height: 1,
+            child: Material(
+              color: Colors.transparent,
+              child: InkWell(
+                onTap: onTap,
+                borderRadius: BorderRadius.circular(13),
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(15, 15, 13, 13),
+                  child: Stack(
+                    children: [
+                      Text(
+                        title.toUpperCase(),
+                        style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w900,
+                          color: Color(0xFF090A0D),
+                          height: 1,
+                        ),
                       ),
-                    ),
-                    Positioned(
-                      left: 4,
-                      bottom: 1,
-                      child: Icon(icon, color: Colors.black, size: 25),
-                    ),
-                    Positioned(
-                      right: -1,
-                      bottom: -1,
-                      child: _CategoryProgressBadge(
-                        progress: progress,
-                        label: progressLabel,
-                        color: accentColor,
+                      Positioned(
+                        left: 4,
+                        bottom: 1,
+                        child: Icon(icon, color: Colors.black, size: 25),
                       ),
-                    ),
-                  ],
+                      Positioned(
+                        right: -1,
+                        bottom: -1,
+                        child: _CategoryProgressBadge(
+                          progress: progress,
+                          label: progressLabel,
+                          color: accentColor,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),
