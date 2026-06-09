@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:start_on/widgets/loading_cat_indicator.dart';
 
 class AiQuestCreationProgressOverlay extends StatefulWidget {
   const AiQuestCreationProgressOverlay({super.key});
@@ -55,6 +56,10 @@ class _AiQuestCreationProgressOverlayState
                     mainAxisSize: MainAxisSize.min,
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
+                      const Center(
+                        child: LoadingCatIndicator(size: 90, floatDistance: 6),
+                      ),
+                      const SizedBox(height: 14),
                       const Text(
                         'AI 퀘스트 생성 중...',
                         textAlign: TextAlign.center,

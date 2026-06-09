@@ -37,25 +37,33 @@ class HomeCategoryCard extends StatelessWidget {
       height: 104,
       child: Padding(
         padding: const EdgeInsets.fromLTRB(1, 1, 3, 4),
-        child: AnimatedOpacity(
-          key: ValueKey('category-card-$title-$totalCount'),
-          duration: const Duration(milliseconds: 220),
-          curve: Curves.easeOutCubic,
-          opacity: emptyOpacity,
-          child: neu.Neumorphic(
-            style: neu.NeumorphicStyle(
-              depth: 6,
-              intensity: 1,
-              surfaceIntensity: 0.44,
-              lightSource: neu.LightSource.topLeft,
-              color: backgroundColor,
-              shadowLightColor: Colors.white,
-              shadowDarkColor: const Color(0xFF6E7685).withValues(alpha: 0.54),
-              boxShape: neu.NeumorphicBoxShape.roundRect(
-                BorderRadius.circular(13),
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            AnimatedOpacity(
+              key: ValueKey('category-card-$title-$totalCount'),
+              duration: const Duration(milliseconds: 220),
+              curve: Curves.easeOutCubic,
+              opacity: emptyOpacity,
+              child: neu.Neumorphic(
+                style: neu.NeumorphicStyle(
+                  depth: 6,
+                  intensity: 1,
+                  surfaceIntensity: 0.44,
+                  lightSource: neu.LightSource.topLeft,
+                  color: backgroundColor,
+                  shadowLightColor: Colors.white,
+                  shadowDarkColor: const Color(
+                    0xFF6E7685,
+                  ).withValues(alpha: 0.54),
+                  boxShape: neu.NeumorphicBoxShape.roundRect(
+                    BorderRadius.circular(13),
+                  ),
+                ),
+                child: const SizedBox.expand(),
               ),
             ),
-            child: Material(
+            Material(
               color: Colors.transparent,
               child: InkWell(
                 onTap: onTap,
@@ -92,7 +100,7 @@ class HomeCategoryCard extends StatelessWidget {
                 ),
               ),
             ),
-          ),
+          ],
         ),
       ),
     );

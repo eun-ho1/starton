@@ -33,6 +33,7 @@ import 'package:start_on/storage/local_data_store.dart';
 import 'package:start_on/widgets/ai_quest_creation_progress_overlay.dart';
 import 'package:start_on/widgets/common.dart';
 import 'package:start_on/widgets/quest_completion_celebration.dart';
+import 'package:start_on/widgets/loading_cat_indicator.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:permission_handler/permission_handler.dart';
@@ -161,9 +162,7 @@ class _AuthGateState extends State<_AuthGate> {
       return Scaffold(
         body: Container(
           decoration: const BoxDecoration(color: Color(0xFFF1F3F8)),
-          child: const Center(
-            child: CircularProgressIndicator(color: Color(0xFF6F63FF)),
-          ),
+          child: const Center(child: LoadingCatIndicator()),
         ),
       );
     }
@@ -318,12 +317,14 @@ class _AdFocusShellState extends State<AdFocusShell>
   bool _isCreatingAiQuest = false;
   bool _isSavingAiQuest = false;
   bool _isSavingCompletedQuest = false;
+  bool _isDeletingQuests = false;
   bool _isOpeningQuestTimer = false;
   bool _isQuestTimerRouteOpen = false;
   bool _isQuestTimerBottomSheetOpen = false;
   bool _didShowLaunchQuestTimerSheet = false;
   bool _notificationsEnabled = true;
   bool _showQuestCelebration = false;
+  int _deletingQuestCount = 0;
   int _questAutoAdvanceRemainingSeconds = 0;
   AppLocalData _localData = AppLocalData.initial();
   final Set<String> _skippedRetryQuestIds = <String>{};
@@ -464,7 +465,10 @@ class _AdFocusShellState extends State<AdFocusShell>
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const CircularProgressIndicator(color: Color(0xFF6F63FF)),
+                if (_usesServerData)
+                  const LoadingCatIndicator()
+                else
+                  const CircularProgressIndicator(color: Color(0xFF6F63FF)),
                 const SizedBox(height: 16),
                 Text(
                   loadingMessage,
@@ -507,6 +511,7 @@ class _AdFocusShellState extends State<AdFocusShell>
     ];
 
     final isAiQuestBusy = _isCreatingAiQuest || _isSavingAiQuest;
+    final isPrimaryActionBlocked = isAiQuestBusy || _isDeletingQuests;
 
     return Scaffold(
       key: _scaffoldKey,
@@ -533,6 +538,8 @@ class _AdFocusShellState extends State<AdFocusShell>
           if (_isSavingAiQuest) const _AiQuestSavingShimmerOverlay(),
           if (_isSavingCompletedQuest)
             const _QuestCompletionSavingShimmerOverlay(),
+          if (_isDeletingQuests)
+            _QuestDeletingShimmerOverlay(count: _deletingQuestCount),
           if (_questAutoAdvanceQuestId != null &&
               _questAutoAdvanceRemainingSeconds > 0)
             _QuestAutoAdvanceOverlay(
@@ -552,7 +559,7 @@ class _AdFocusShellState extends State<AdFocusShell>
             width: 56,
             height: 42,
             child: FloatingActionButton(
-              onPressed: isAiQuestBusy ? null : _openAddQuest,
+              onPressed: isPrimaryActionBlocked ? null : _openAddQuest,
               backgroundColor: const Color(0xFFD0CBFF),
               foregroundColor: const Color(0xFF6358FF),
               elevation: 0,
@@ -565,7 +572,7 @@ class _AdFocusShellState extends State<AdFocusShell>
         ),
       ),
       bottomNavigationBar: AbsorbPointer(
-        absorbing: isAiQuestBusy,
+        absorbing: isPrimaryActionBlocked,
         child: AppBottomNavBar(currentIndex: _currentIndex, onTap: _changeTab),
       ),
     );
@@ -1245,48 +1252,67 @@ class _AdFocusShellState extends State<AdFocusShell>
   }
 
   Future<void> _deleteQuestsAsync(List<QuestItem> quests) async {
-    final questIdsToRemove = <String>{};
-    for (final quest in quests) {
-      await _stopQuestTimerIfActive(quest.id);
-
-      final taskIntakeRepository = _taskIntakeRepository;
-      if (quest.isTaskBacked && taskIntakeRepository != null) {
-        try {
-          await taskIntakeRepository.deleteTask(quest.id);
-        } catch (error) {
-          _showQuestSyncError('일부 Task를 삭제하지 못했어요.', error);
-          continue;
-        }
-      }
-
-      final questRepository = _questRepository;
-      if (questRepository != null && quest.syncsWithQuestApi) {
-        try {
-          await questRepository.deleteQuest(quest.id);
-        } catch (error) {
-          _showQuestSyncError('일부 퀘스트를 삭제하지 못했어요.', error);
-          continue;
-        }
-      }
-      questIdsToRemove.add(quest.id);
-    }
-
-    if (!mounted || questIdsToRemove.isEmpty) {
+    if (quests.isEmpty || _isDeletingQuests || !mounted) {
       return;
     }
 
-    _setLocalData(
-      _localData.copyWith(
-        quests: _localData.quests
-            .where((quest) => !questIdsToRemove.contains(quest.id))
-            .toList(),
-      ),
-    );
-    _showStyledSnackBar(
-      '${questIdsToRemove.length}개 퀘스트를 삭제했어요.',
-      centerText: true,
-      compact: true,
-    );
+    setState(() {
+      _isDeletingQuests = true;
+      _deletingQuestCount = quests.length;
+    });
+
+    final questIdsToRemove = <String>{};
+
+    try {
+      for (final quest in quests) {
+        await _stopQuestTimerIfActive(quest.id);
+
+        final taskIntakeRepository = _taskIntakeRepository;
+        if (quest.isTaskBacked && taskIntakeRepository != null) {
+          try {
+            await taskIntakeRepository.deleteTask(quest.id);
+          } catch (error) {
+            _showQuestSyncError('일부 Task를 삭제하지 못했어요.', error);
+            continue;
+          }
+        }
+
+        final questRepository = _questRepository;
+        if (questRepository != null && quest.syncsWithQuestApi) {
+          try {
+            await questRepository.deleteQuest(quest.id);
+          } catch (error) {
+            _showQuestSyncError('일부 퀘스트를 삭제하지 못했어요.', error);
+            continue;
+          }
+        }
+        questIdsToRemove.add(quest.id);
+      }
+
+      if (!mounted || questIdsToRemove.isEmpty) {
+        return;
+      }
+
+      _setLocalData(
+        _localData.copyWith(
+          quests: _localData.quests
+              .where((quest) => !questIdsToRemove.contains(quest.id))
+              .toList(),
+        ),
+      );
+      _showStyledSnackBar(
+        '${questIdsToRemove.length}개 퀘스트를 삭제했어요.',
+        centerText: true,
+        compact: true,
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isDeletingQuests = false;
+          _deletingQuestCount = 0;
+        });
+      }
+    }
   }
 
   void _updateUserEnergy(String energy) {
@@ -2613,6 +2639,18 @@ class _AiQuestSavingShimmerOverlay extends StatelessWidget {
   }
 }
 
+class _QuestDeletingShimmerOverlay extends StatelessWidget {
+  const _QuestDeletingShimmerOverlay({required this.count});
+
+  final int count;
+
+  @override
+  Widget build(BuildContext context) {
+    final title = count > 1 ? '$count개 퀘스트 삭제 중...' : '퀘스트 삭제 중...';
+    return _SavingShimmerOverlay(title: title);
+  }
+}
+
 class _SavingShimmerOverlay extends StatefulWidget {
   const _SavingShimmerOverlay({required this.title});
 
@@ -2669,6 +2707,10 @@ class _SavingShimmerOverlayState extends State<_SavingShimmerOverlay>
                       fontSize: 16,
                       fontWeight: FontWeight.w900,
                     ),
+                  ),
+                  const SizedBox(height: 14),
+                  const Center(
+                    child: LoadingCatIndicator(size: 82, floatDistance: 6),
                   ),
                   const SizedBox(height: 18),
                   _ShimmerBlock(
